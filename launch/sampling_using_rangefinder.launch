@@ -1,0 +1,12 @@
+<launch>
+
+    <arg name="Alt" default="1.0" />
+    <arg name="RangeTopic" default="/mavros/distance_sensor/range"/>
+    <arg name="WP" default="-1"/>
+
+    <param name="alt" value="$(arg Alt)"/>
+    <param name="TargetWP" value="$(arg WP)"/>
+    
+    <node pkg="mavros_fly" type="mavros_fly_descent_using_rangefinder" name="RangeFinder_Descent" args="/mavros/distance_sensor/range:=$(arg RangeTopic)" output="screen"/>
+
+</launch>

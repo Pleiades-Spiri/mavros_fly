@@ -1,0 +1,4 @@
+<launch>	
+	<node name="range_mean" pkg="mavros_fly" type="mavros_fly_range_to_range_filter_chain"/>
+
+</launch>

@@ -2,7 +2,7 @@
 
     <arg name="Alt" default="1.0" />
     <arg name="RangeTopic" default="/Range_filtered"/>
-    <arg name="WP" default="-1"/>
+    <arg name="WP" default="0"/>
 
     <param name="alt" value="$(arg Alt)"/>
     <param name="TargetWP" value="$(arg WP)"/>

@@ -14,6 +14,7 @@ mavros_msgs::State current_state;
 geometry_msgs::PoseStamped current_pose, goal_pose;
 bool goal=false;
 bool goal_set=false;
+bool offboard_enabled = false;
 
 float Sampling_time = -1;
 
@@ -41,12 +42,12 @@ void range_sensor_cb(const sensor_msgs::Range::ConstPtr& rangeMsg){
 
     if(range_msg.range>required_height){
         goal_pose = current_pose;
-        goal_pose.pose.position.z = current_pose.pose.position.z - 0.1;
+        goal_pose.pose.position.z = current_pose.pose.position.z - 0.01;
     
     }
     else if (required_height-range_msg.range>0.2){
         goal_pose = current_pose;
-        goal_pose.pose.position.z = current_pose.pose.position.z + 0.1;
+        goal_pose.pose.position.z = current_pose.pose.position.z + 0.01;
     
     }
     else{
@@ -55,7 +56,7 @@ void range_sensor_cb(const sensor_msgs::Range::ConstPtr& rangeMsg){
             Sampling_time = 0;
         }
         
-        if(Sampling_time < 10){
+        if(Sampling_time < 4){
             float Duration = (ros::Time::now() - Start).toSec();
             std::cout<<"Sampling duration "<<Sampling_time<<std::endl;
             Sampling_time = Sampling_time + Duration;    
@@ -161,11 +162,12 @@ int main(int argc, char **argv)
       if(!goal){
 
           if (current_mission_point == target_mission_point && current_state.mode != "OFFBOARD" &&
-              (ros::Time::now() - last_request > ros::Duration(5.0))){
+              (ros::Time::now() - last_request > ros::Duration(5.0)) && !offboard_enabled){
               ROS_INFO("Enabling Offboard");
               if( set_mode_client.call(offb_set_mode) &&
                   offb_set_mode.response.mode_sent){
                   ROS_INFO("Offboard enabled");
+                  offboard_enabled = true;
               }
               last_request = ros::Time::now();
           } else {

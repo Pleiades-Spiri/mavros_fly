@@ -4,6 +4,8 @@
 #include <mavros_msgs/CommandTOL.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
+#include <string>
+
 
 float required_height = 3.0;
 mavros_msgs::State current_state;

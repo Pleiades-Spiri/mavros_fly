@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(mavros_fly)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -13,6 +13,8 @@ find_package(catkin REQUIRED COMPONENTS
   mavros_extras
   mavros_msgs
   mavlink
+  tf
+  tf2
 )
 
 ## System dependencies are found with CMake's conventions
@@ -139,6 +141,7 @@ add_executable(${PROJECT_NAME}_node src/offb_node.cpp)
 add_executable(${PROJECT_NAME}_set_goal src/planner_goal_set.cpp)
 add_executable(${PROJECT_NAME}_descent_using_rangefinder src/descent_using_rangefinder.cpp)
 add_executable(${PROJECT_NAME}_range_to_range_filter_chain src/range_to_range_filter_chain.cpp src/LowPassFilter.cpp)
+add_executable(${PROJECT_NAME}_lander src/percise_landing.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -164,7 +167,9 @@ add_executable(${PROJECT_NAME}_range_to_range_filter_chain src/range_to_range_fi
  target_link_libraries(${PROJECT_NAME}_range_to_range_filter_chain
    ${catkin_LIBRARIES}
  )
-
+ target_link_libraries(${PROJECT_NAME}_lander
+   ${catkin_LIBRARIES}
+ )
 
 
 

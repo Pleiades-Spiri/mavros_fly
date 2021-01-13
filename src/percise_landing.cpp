@@ -1,7 +1,9 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
+#include <geometry_msgs/Vector3.h>
 #include <mavros_msgs/CommandBool.h>
+#include <mavros_msgs/PositionTarget.h>
 #include <mavros_msgs/CommandTOL.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
@@ -9,6 +11,7 @@
 #include "tf/transform_datatypes.h"
 #include <ros/publisher.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <cmath>
 
 
 
@@ -21,6 +24,8 @@ class Lander
     
     ap_tag_frame = AprilFrame;
     target_reached = false;
+    offboard = false;
+    target_found = false;
     node_handle_ = nh_;
     tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
     transform.setOrigin(tf::Vector3(0,0,0));
@@ -28,6 +33,22 @@ class Lander
     transform.setRotation(q);
     
     local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
+    local_set_pose_raw_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);
+    
+    arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
+
+    set_mode_client = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+    
+    landing_client = nh_.serviceClient<mavros_msgs::CommandTOL>("mavros/cmd/land");
+    
+    land_cmd.request.yaw = 0;
+    land_cmd.request.latitude = 0;
+    land_cmd.request.longitude = 0;
+    land_cmd.request.altitude = 0;
+    
+    vel.x = 0.001;
+    vel.y = 0.001;
+    vel.z = 0.001;
 
 
     
@@ -37,21 +58,38 @@ class Lander
     tf::TransformListener listener;
     geometry_msgs::PoseStamped landing_target;
     geometry_msgs::PoseStamped current_pose;
+    geometry_msgs::Vector3 vel;
     tf::StampedTransform transform;
+    mavros_msgs::State current_state;
     
     ros::Publisher tag_loc_pub;
     ros::NodeHandle node_handle_;
     
     ros::Publisher local_set_pos_pub;
+    ros::Publisher local_set_pose_raw_pub;
+    
+    ros::ServiceClient arming_client;
+    ros::ServiceClient set_mode_client;
+    ros::ServiceClient landing_client;
+    
+    mavros_msgs::CommandTOL land_cmd;
+    mavros_msgs::PositionTarget pose_raw;
+    
     
     
     bool target_reached;
+    
+    bool offboard;
+    
+    bool target_found;
     
     void SetLandingTarget(const tf2_msgs::TFMessageConstPtr& TFmsg);
     
     void EngageLanding(geometry_msgs::PoseStamped ApLTmsg);
     
     void SetCurrentPose(geometry_msgs::PoseStamped Pmsg);
+    
+    void FcuState(mavros_msgs::State Statemsg);
    
 
 };
@@ -80,8 +118,74 @@ int main(int argc, char **argv)
     ros::Subscriber CurrentPose_sub = nh.subscribe("/mavros/local_position/pose", 10, &Lander::SetCurrentPose, &AprilTagLander);
     
 
+    ros::Subscriber state_sub = nh.subscribe("mavros/state", 100, &Lander::FcuState, &AprilTagLander);
+
+   
+    
+
     ros::Rate rate(20.0);
+    
+    while(ros::ok() && !AprilTagLander.current_state.connected){
+        ros::spinOnce();
+        rate.sleep();
+    }
+
+
+    /*for(int i = 100; ros::ok() && i > 0; --i){
+        AprilTagLander.local_set_pos_pub.publish(AprilTagLander.landing_target);
+        ros::spinOnce();
+        rate.sleep();
+    }*/
+
+    mavros_msgs::SetMode offb_set_mode;
+    offb_set_mode.request.custom_mode = "OFFBOARD";
+
+
+    //mavros_msgs::CommandBool arm_cmd;
+    //arm_cmd.request.value = true;
+
+    
+
+    ros::Time last_request = ros::Time::now();
+    
+    
+    
     while(ros::ok()){
+    
+    
+         if (!AprilTagLander.offboard && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
+            
+            ROS_INFO("Enabling Offboard");
+            
+            if(AprilTagLander.set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){
+                ROS_INFO("Offboard enabled");
+            }
+            
+            last_request = ros::Time::now();
+         
+         } 
+         
+
+        if (AprilTagLander.current_state.mode == "OFFBOARD" && AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
+
+            if (AprilTagLander.landing_client.call(AprilTagLander.land_cmd) && AprilTagLander.land_cmd.response.success){
+                ROS_INFO("Goal Reached Landing");
+            }
+            
+            last_request = ros::Time::now();
+        }
+        
+        if (AprilTagLander.current_state.mode == "OFFBOARD"){
+        		
+        		if (!AprilTagLander.offboard){
+        			ROS_INFO("setting offboard to true");
+        			AprilTagLander.offboard = true;
+        		}
+        
+        }
+    
+    
+    
         ros::spinOnce();
         rate.sleep();
     }
@@ -105,6 +209,8 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
       //ROS_ERROR("%s",ex.what());
       //ros::Duration(1.0).sleep();
     }
+    
+    target_found = true;
     
     landing_target.header.stamp = ros::Time::now();
     landing_target.header.frame_id = "/local_origin";
@@ -138,8 +244,12 @@ void Lander::EngageLanding(geometry_msgs::PoseStamped uavPosemsg){
     Target_Pose.pose.position.x = landing_target.pose.position.x;
     Target_Pose.pose.position.y = landing_target.pose.position.y;
     
+    pose_raw.position = Target_Pose.pose.position;
+    pose_raw.velocity = vel;
     
-    local_set_pos_pub.publish(Target_Pose);
+    local_set_pose_raw_pub.publish(pose_raw);
+    
+    //local_set_pos_pub.publish(Target_Pose);
     
 
 
@@ -148,8 +258,20 @@ void Lander::EngageLanding(geometry_msgs::PoseStamped uavPosemsg){
 void Lander::SetCurrentPose(geometry_msgs::PoseStamped Pmsg){
 
    current_pose = Pmsg;
+   
+   if (target_found && (abs(current_pose.pose.position.x - landing_target.pose.position.x) < 0.01) && (abs(current_pose.pose.position.y - landing_target.pose.position.y) < 0.01) ){
+   		ROS_INFO("Setting target_reached to true");
+   		target_reached = true;
+   }
+
 
 }  
-    
+
+
+void Lander::FcuState(mavros_msgs::State Statemsg){
+
+   current_state = Statemsg;
+
+}   
     
     

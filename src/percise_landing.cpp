@@ -7,6 +7,8 @@
 #include <mavros_msgs/CommandTOL.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
+#include <mavros_msgs/RCIn.h>
+#include <mavros_msgs/ParamPush.h>
 #include <tf/transform_listener.h>
 #include "tf/transform_datatypes.h"
 #include <ros/publisher.h>
@@ -20,12 +22,13 @@ class Lander
 {
   public: 
 
-    Lander(std::string AprilFrame, ros::NodeHandle nh_){
+    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel){
     
     ap_tag_frame = AprilFrame;
     target_reached = false;
     offboard = false;
     target_found = false;
+    radio = false;
     node_handle_ = nh_;
     tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
     transform.setOrigin(tf::Vector3(0,0,0));
@@ -41,6 +44,8 @@ class Lander
     
     landing_client = nh_.serviceClient<mavros_msgs::CommandTOL>("mavros/cmd/land");
     
+    parameter_set_client = nh_.serviceClient<mavros_msgs::ParamPush>("mavros/param/push");
+    
     land_cmd.request.yaw = 0;
     land_cmd.request.latitude = 0;
     land_cmd.request.longitude = 0;
@@ -49,6 +54,8 @@ class Lander
     vel.x = 0.001;
     vel.y = 0.001;
     vel.z = 0.001;
+    
+    radio_channel = channel;
 
 
     
@@ -71,17 +78,21 @@ class Lander
     ros::ServiceClient arming_client;
     ros::ServiceClient set_mode_client;
     ros::ServiceClient landing_client;
+    ros::ServiceClient parameter_set_client;
     
     mavros_msgs::CommandTOL land_cmd;
     mavros_msgs::PositionTarget pose_raw;
+    mavros_msgs::ParamPush param_push_msg;
     
-    
+    int radio_channel;
     
     bool target_reached;
     
     bool offboard;
     
     bool target_found;
+
+    bool radio;
     
     void SetLandingTarget(const tf2_msgs::TFMessageConstPtr& TFmsg);
     
@@ -90,6 +101,8 @@ class Lander
     void SetCurrentPose(geometry_msgs::PoseStamped Pmsg);
     
     void FcuState(mavros_msgs::State Statemsg);
+
+    void SetRadio(mavros_msgs::RCIn RCmsg);   
    
 
 };
@@ -109,13 +122,21 @@ int main(int argc, char **argv)
     nh.param<std::string>("detection_topic",detection_topic,"tag_detections");
     nh.getParam("detection_topic",detection_topic);
     
+    int channel_num;
+    nh.param<int>("channel_num",channel_num,9);
+    nh.getParam("channel_num",channel_num);
+    
+    float mavros_param_MPC_XY_VEL_MAX;
+    nh.param<float>("/mavros/param/MPC_XY_VEL_MAX",mavros_param_MPC_XY_VEL_MAX,0.1);
+    nh.getParam("/mavros/param/MPC_XY_VEL_MAX",mavros_param_MPC_XY_VEL_MAX);
 
     
-    Lander AprilTagLander(apriltag_frame,nh);
+    Lander AprilTagLander(apriltag_frame,nh,channel_num);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
     ros::Subscriber AprilTag_location_sub = nh.subscribe("/aprilTag_landing_location", 10, &Lander::EngageLanding, &AprilTagLander);
     ros::Subscriber CurrentPose_sub = nh.subscribe("/mavros/local_position/pose", 10, &Lander::SetCurrentPose, &AprilTagLander);
+    ros::Subscriber radio_sub = nh.subscribe("/mavros/rc/in", 10, &Lander::SetRadio, &AprilTagLander);
     
 
     ros::Subscriber state_sub = nh.subscribe("mavros/state", 100, &Lander::FcuState, &AprilTagLander);
@@ -153,7 +174,7 @@ int main(int argc, char **argv)
     while(ros::ok()){
     
     
-         if (!AprilTagLander.offboard && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
+         if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
             
             ROS_INFO("Enabling Offboard");
             
@@ -183,6 +204,8 @@ int main(int argc, char **argv)
         		}
         
         }
+        
+        
     
     
     
@@ -247,10 +270,10 @@ void Lander::EngageLanding(geometry_msgs::PoseStamped uavPosemsg){
     pose_raw.position = Target_Pose.pose.position;
     pose_raw.velocity = vel;
     
-    local_set_pose_raw_pub.publish(pose_raw);
-    
-    //local_set_pos_pub.publish(Target_Pose);
-    
+    //local_set_pose_raw_pub.publish(pose_raw);
+    if (radio){
+      local_set_pos_pub.publish(Target_Pose);
+    }
 
 
 }
@@ -272,6 +295,24 @@ void Lander::FcuState(mavros_msgs::State Statemsg){
 
    current_state = Statemsg;
 
-}   
+}
+
+void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
+
+   if (RCmsg.channels[radio_channel] == 2006 && !radio){
+      radio = true;
+      std::cout<<"Radio activated"<<std::endl;
+      node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",0.1);
+      parameter_set_client.call(param_push_msg);
+      
+   }
+   else if (radio && RCmsg.channels[radio_channel] != 2006){
+      radio = false;
+      std::cout<<"Radio deactivated"<<std::endl;
+      node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",12.0);
+      parameter_set_client.call(param_push_msg);
+   }
+   
+}     
     
     

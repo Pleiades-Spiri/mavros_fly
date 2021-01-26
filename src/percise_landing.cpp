@@ -22,7 +22,7 @@ class Lander
 {
   public: 
 
-    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel){
+    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel, double aVel){
     
     ap_tag_frame = AprilFrame;
     target_reached = false;
@@ -58,6 +58,8 @@ class Lander
     radio_channel = channel;
 
 
+    approuch_vel = aVel;
+
     
     }
     
@@ -85,6 +87,8 @@ class Lander
     mavros_msgs::ParamPush param_push_msg;
     
     int radio_channel;
+
+    double approuch_vel;
     
     bool target_reached;
     
@@ -127,11 +131,11 @@ int main(int argc, char **argv)
     nh.getParam("channel_num",channel_num);
     
     float mavros_param_MPC_XY_VEL_MAX;
-    nh.param<float>("/mavros/param/MPC_XY_VEL_MAX",mavros_param_MPC_XY_VEL_MAX,0.1);
+    nh.param<float>("/mavros/param/MPC_XY_VEL_MAX",mavros_param_MPC_XY_VEL_MAX,0.5);
     nh.getParam("/mavros/param/MPC_XY_VEL_MAX",mavros_param_MPC_XY_VEL_MAX);
 
     
-    Lander AprilTagLander(apriltag_frame,nh,channel_num);
+    Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
     ros::Subscriber AprilTag_location_sub = nh.subscribe("/aprilTag_landing_location", 10, &Lander::EngageLanding, &AprilTagLander);
@@ -174,7 +178,7 @@ int main(int argc, char **argv)
     while(ros::ok()){
     
     
-         if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
+         if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
             
             ROS_INFO("Enabling Offboard");
             
@@ -183,6 +187,13 @@ int main(int argc, char **argv)
             }
             
             last_request = ros::Time::now();
+         
+         }
+         else{
+            
+            if (!AprilTagLander.offboard){
+              ROS_INFO("Vehicle not ready");
+            } 
          
          } 
          
@@ -302,15 +313,20 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
    if (RCmsg.channels[radio_channel] == 2006 && !radio){
       radio = true;
       std::cout<<"Radio activated"<<std::endl;
-      node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",0.1);
+      node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",approuch_vel);
       parameter_set_client.call(param_push_msg);
       
    }
    else if (radio && RCmsg.channels[radio_channel] != 2006){
       radio = false;
+      offboard = false;
+      target_reached = false;
+      target_found = false;
       std::cout<<"Radio deactivated"<<std::endl;
       node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",12.0);
       parameter_set_client.call(param_push_msg);
+      
+      
    }
    
 }     

@@ -142,6 +142,7 @@ add_executable(${PROJECT_NAME}_set_goal src/planner_goal_set.cpp)
 add_executable(${PROJECT_NAME}_descent_using_rangefinder src/descent_using_rangefinder.cpp)
 add_executable(${PROJECT_NAME}_range_to_range_filter_chain src/range_to_range_filter_chain.cpp src/LowPassFilter.cpp)
 add_executable(${PROJECT_NAME}_lander src/percise_landing.cpp)
+add_executable(${PROJECT_NAME}_radio_listen src/radio_listener.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -168,6 +169,9 @@ add_executable(${PROJECT_NAME}_lander src/percise_landing.cpp)
    ${catkin_LIBRARIES}
  )
  target_link_libraries(${PROJECT_NAME}_lander
+   ${catkin_LIBRARIES}
+ )
+ target_link_libraries(${PROJECT_NAME}_radio_listen
    ${catkin_LIBRARIES}
  )
 

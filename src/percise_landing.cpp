@@ -280,6 +280,7 @@ void Lander::EngageLanding(geometry_msgs::PoseStamped uavPosemsg){
     
     pose_raw.position = Target_Pose.pose.position;
     pose_raw.velocity = vel;
+    pose_raw.type_mask = mavros_msgs::PositionTarget::IGNORE_AFX | mavros_msgs::PositionTarget::IGNORE_AFY | mavros_msgs::PositionTarget::IGNORE_AFZ | mavros_msgs::PositionTarget::IGNORE_YAW | mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
     
     //local_set_pose_raw_pub.publish(pose_raw);
     if (radio){

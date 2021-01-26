@@ -2,6 +2,8 @@
 #include <mavros_msgs/State.h>
 #include <mavros_msgs/RCIn.h>
 #include <mavros_msgs/CommandInt.h>
+#include <unistd.h>
+#include <sys/reboot.h>
 
 class Listener{
 
@@ -12,7 +14,8 @@ class Listener{
       node_handle_ = nh_;
       FCU_restart_channel = ResCH;
       Armed = true;
-      Radio_restart = false;
+      Radio_restart_FCU = false;
+      Radio_restart_OBC = false;
       Restart_Req_Sent = false;
       
       Reboot_FCU = nh_.serviceClient<mavros_msgs::CommandInt>("/mavros/cmd/command_int");
@@ -27,7 +30,8 @@ class Listener{
     
     bool Armed;
     
-    bool Radio_restart;
+    bool Radio_restart_FCU;
+    bool Radio_restart_OBC;
     
     bool Restart_Req_Sent;
     
@@ -36,6 +40,7 @@ class Listener{
     void Radio(mavros_msgs::RCIn RCmsg);
     
     int FCU_restart_channel;
+
     
 
 
@@ -78,7 +83,7 @@ int main(int argc, char **argv)
     
     while(ros::ok()){
     
-        if (!Listen.Armed && Listen.Radio_restart && (ros::Time::now() - last_request > ros::Duration(5.0))){
+        if (!Listen.Armed && Listen.Radio_restart_FCU && (ros::Time::now() - last_request > ros::Duration(5.0))){
         
             std::cout<<"Restarting the FCU"<<std::endl;
         
@@ -87,6 +92,16 @@ int main(int argc, char **argv)
                 Listen.Restart_Req_Sent = true;
                 
             }
+        }
+        
+        if (!Listen.Armed && Listen.Radio_restart_OBC && (ros::Time::now() - last_request > ros::Duration(5.0))){
+        
+            std::cout<<"Restarting the OBC"<<std::endl;
+            last_request = ros::Time::now();
+            sync();
+            std::cout<<reboot(RB_AUTOBOOT)<<std::endl;
+            std::cout<<system("echo spiri-friend | sudo -S reboot now")<<std::endl;
+            
         }
         
         ros::spinOnce();
@@ -110,13 +125,25 @@ void Listener::FcuState(mavros_msgs::State Statemsg){
 void Listener::Radio(mavros_msgs::RCIn RCmsg){
    std::cout<<"Radio channel value"<<std::endl;
    std::cout<<RCmsg.channels[FCU_restart_channel]<<std::endl;
-   if (RCmsg.channels[FCU_restart_channel] == 982 && !Radio_restart && !Armed){
-      Radio_restart = true;
-      std::cout<<"Radio restaet activated"<<std::endl;
+   if (RCmsg.channels[FCU_restart_channel] == 982 && !Radio_restart_FCU && !Armed){
+      Radio_restart_FCU = true;
+      std::cout<<"FCU restart activated"<<std::endl;
       
    }
-   else if (Radio_restart && RCmsg.channels[FCU_restart_channel] != 982){
-      Radio_restart = false;
+   else if (Radio_restart_FCU && RCmsg.channels[FCU_restart_channel] != 982){
+      Radio_restart_FCU = false;
+      
+   }
+   
+   
+   
+   if (RCmsg.channels[FCU_restart_channel] == 2006 && !Radio_restart_OBC && !Armed){
+      Radio_restart_OBC = true;
+      std::cout<<"OBC restart activated"<<std::endl;
+      
+   }
+   else if (Radio_restart_OBC && RCmsg.channels[FCU_restart_channel] != 2006){
+      Radio_restart_OBC = false;
       
    }
    

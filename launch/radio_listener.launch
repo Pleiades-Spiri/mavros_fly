@@ -1,0 +1,4 @@
+<launch>	
+	<node name="radio_listener" pkg="mavros_fly" type="mavros_fly_radio_listen" output="screen"/>
+
+</launch>

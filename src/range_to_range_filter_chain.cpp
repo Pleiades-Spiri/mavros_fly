@@ -37,13 +37,12 @@ protected:
 
 public:
   // Constructor
-  RangeToRangeMeanFilter() :
-     private_nh_("~"),
+  RangeToRangeMeanFilter(double cutoff,double deltatime, ros::NodeHandle n) :
      range_sub_(nh_, "/mavros/distance_sensor/range", 50)
      {
 
      //filter->configure("MeanFilterDouble5");
-     lpf.reconfigureFilter(0.5,0.01);
+     lpf.reconfigureFilter(cutoff,deltatime);
      //filter_chain_.configure("A");
 
      range_sub_.registerCallback(boost::bind(&RangeToRangeMeanFilter::callback, this, _1));
@@ -81,8 +80,18 @@ public:
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "range_to_range_filter_chain");
+
+  ros::NodeHandle nh;
   
-  RangeToRangeMeanFilter t;
+  double cut_off_frequancy;
+  nh.param<double>("cut_off_frequancy",cut_off_frequancy,0.5);
+  nh.getParam("cut_off_frequancy",cut_off_frequancy);
+  
+  double delta_time;
+  nh.param<double>("delta_time",delta_time,0.01);
+  nh.getParam("delta_time",delta_time);
+  
+  RangeToRangeMeanFilter t(cut_off_frequancy,delta_time,nh);
   ros::spin();
   
   return 0;

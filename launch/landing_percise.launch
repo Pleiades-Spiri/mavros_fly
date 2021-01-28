@@ -1,0 +1,8 @@
+<launch>
+	<arg name="Vel" default="0.5" />
+	
+       
+        <param name="/mavros/param/MPC_XY_VEL_MAX" value="$(arg Vel)"/>	
+	<node name="percise_landing" pkg="mavros_fly" type="mavros_fly_lander" output="screen"/>
+
+</launch>

@@ -4,15 +4,19 @@
 #include <mavros_msgs/CommandInt.h>
 #include <unistd.h>
 #include <sys/reboot.h>
+#include <string> 
+
 
 class Listener{
 
   public:
     
-    Listener(ros::NodeHandle nh_, int ResCH){
+    Listener(ros::NodeHandle nh_, int ResCH, int GainCH, int ExpCH){
     
       node_handle_ = nh_;
       FCU_restart_channel = ResCH;
+      Cam_Gain_channel = GainCH;
+      Cam_Exp_channel = ExpCH;
       Armed = true;
       Radio_restart_FCU = false;
       Radio_restart_OBC = false;
@@ -41,7 +45,15 @@ class Listener{
     
     int FCU_restart_channel;
 
-    
+    int Cam_Gain_channel;
+
+    int Cam_Exp_channel;
+
+    int GainValue;
+    int NewGainValue;
+
+    int ExpValue;
+    int NewExpValue;    
 
 
 };
@@ -56,9 +68,20 @@ int main(int argc, char **argv)
     int fcu_restart_channel_num;
     nh.param<int>("fcu_restart_channel_num",fcu_restart_channel_num,10);
     nh.getParam("fcu_restart_channel_num",fcu_restart_channel_num);
+
+    int cam_gain_channel_num;
+    nh.param<int>("cam_gain_channel_num",cam_gain_channel_num,11);
+    nh.getParam("cam_gain_channel_num",cam_gain_channel_num);
+
+    int cam_exp_channel_num;
+    nh.param<int>("cam_exp_channel_num",cam_exp_channel_num,12);
+    nh.getParam("cam_exp_channel_num",cam_exp_channel_num);
+
+
+
     
     
-    Listener Listen(nh,fcu_restart_channel_num);
+    Listener Listen(nh,fcu_restart_channel_num,cam_gain_channel_num,cam_exp_channel_num);
     
     ros::Subscriber radio_sub = nh.subscribe("/mavros/rc/in", 10, &Listener::Radio, &Listen);
     
@@ -104,9 +127,27 @@ int main(int argc, char **argv)
             
         }
         
+        if (Listen.NewGainValue != Listen.GainValue){
+            
+            std::cout<<system(("v4l2-ctl -d /dev/video0 -c gain="+ std::to_string(Listen.NewGainValue)).c_str())<<std::endl;
+            std::cout<<system(("v4l2-ctl -d /dev/video1 -c gain="+ std::to_string(Listen.NewGainValue)).c_str())<<std::endl;
+            Listen.GainValue = Listen.NewGainValue;
+        
+        }
+        
+        if (Listen.NewExpValue != Listen.ExpValue){
+            
+            std::cout<<system(("v4l2-ctl -d /dev/video0 -c exposure="+ std::to_string(Listen.NewExpValue)).c_str())<<std::endl;
+            std::cout<<system(("v4l2-ctl -d /dev/video1 -c exposure="+ std::to_string(Listen.NewExpValue)).c_str())<<std::endl;
+            Listen.ExpValue = Listen.NewExpValue;
+        
+        }
+        
         ros::spinOnce();
         rate.sleep();
     }
+    
+    return 0;
     
     
     
@@ -146,6 +187,20 @@ void Listener::Radio(mavros_msgs::RCIn RCmsg){
       Radio_restart_OBC = false;
       
    }
+
+   if (RCmsg.channels[Cam_Gain_channel] >= 982){
+
+      NewGainValue = RCmsg.channels[Cam_Gain_channel] - 982;
+
+   }
+   
+   if (RCmsg.channels[Cam_Exp_channel] >= 982){
+
+      NewExpValue = (RCmsg.channels[Cam_Exp_channel] - 982)* 14;
+
+   }
+   
+
    
 }     
 

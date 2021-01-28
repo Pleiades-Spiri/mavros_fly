@@ -1,4 +1,10 @@
-<launch>	
+<launch>
+
+        <arg name="cut_off_freq" default="0.25" />
+        <arg name="delta_t" default="0.1"/>
+
+        <param name="cut_off_frequancy" value="$(arg cut_off_freq)"/>
+        <param name="delta_time" value="$(arg delta_t)"/>	
 	<node name="range_mean" pkg="mavros_fly" type="mavros_fly_range_to_range_filter_chain"/>
 
 </launch>

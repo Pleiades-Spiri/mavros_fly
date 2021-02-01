@@ -22,43 +22,47 @@ class Lander
 {
   public: 
 
-    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel, double aVel){
+    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel, double aVel, double TargTol, double PadTagD){
     
-    ap_tag_frame = AprilFrame;
-    target_reached = false;
-    offboard = false;
-    target_found = false;
-    radio = false;
-    node_handle_ = nh_;
-    tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
-    transform.setOrigin(tf::Vector3(0,0,0));
-    tf::Quaternion q(0,0,0,1);
-    transform.setRotation(q);
-    
-    local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
-    local_set_pose_raw_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);
-    
-    arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
+      ap_tag_frame = AprilFrame;
+      target_reached = false;
+      offboard = false;
+      target_found = false;
+      radio = false;
+      node_handle_ = nh_;
+      tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
+      transform.setOrigin(tf::Vector3(0,0,0));
+      tf::Quaternion q(0,0,0,1);
+      transform.setRotation(q);
+      
+      local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
+      local_set_pose_raw_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);
+      
+      arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
 
-    set_mode_client = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
-    
-    landing_client = nh_.serviceClient<mavros_msgs::CommandTOL>("mavros/cmd/land");
-    
-    parameter_set_client = nh_.serviceClient<mavros_msgs::ParamPush>("mavros/param/push");
-    
-    land_cmd.request.yaw = 0;
-    land_cmd.request.latitude = 0;
-    land_cmd.request.longitude = 0;
-    land_cmd.request.altitude = 0;
-    
-    vel.x = 0.001;
-    vel.y = 0.001;
-    vel.z = 0.001;
-    
-    radio_channel = channel;
+      set_mode_client = nh_.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+      
+      landing_client = nh_.serviceClient<mavros_msgs::CommandTOL>("mavros/cmd/land");
+      
+      parameter_set_client = nh_.serviceClient<mavros_msgs::ParamPush>("mavros/param/push");
+      
+      land_cmd.request.yaw = 0;
+      land_cmd.request.latitude = 0;
+      land_cmd.request.longitude = 0;
+      land_cmd.request.altitude = 0;
+      
+      vel.x = 0.001;
+      vel.y = 0.001;
+      vel.z = 0.001;
+      
+      radio_channel = channel;
 
 
-    approuch_vel = aVel;
+      approuch_vel = aVel;
+      
+      target_tol = TargTol;
+      
+      pad_target_x_del = PadTagD;
 
     
     }
@@ -89,6 +93,10 @@ class Lander
     int radio_channel;
 
     double approuch_vel;
+    
+    double target_tol;
+    
+    double pad_target_x_del;
     
     bool target_reached;
     
@@ -133,9 +141,17 @@ int main(int argc, char **argv)
     float mavros_param_MPC_XY_VEL_MAX;
     nh.param<float>("/mavros/param/MPC_XY_VEL_MAX",mavros_param_MPC_XY_VEL_MAX,0.5);
     nh.getParam("/mavros/param/MPC_XY_VEL_MAX",mavros_param_MPC_XY_VEL_MAX);
+    
+    float target_tolerance;
+    nh.param<float>("target_tolerance",target_tolerance,0.1);
+    nh.getParam("target_tolerance",target_tolerance);
+    
+    float pad_to_target_xdelta;
+    nh.param<float>("pad_to_target_xdelta",pad_to_target_xdelta,1.0);
+    nh.getParam("pad_to_target_xdelta",pad_to_target_xdelta);
 
     
-    Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX);
+    Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
     ros::Subscriber AprilTag_location_sub = nh.subscribe("/aprilTag_landing_location", 10, &Lander::EngageLanding, &AprilTagLander);
@@ -177,7 +193,7 @@ int main(int argc, char **argv)
     
     while(ros::ok()){
     
-    
+
          if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
             
             ROS_INFO("Enabling Offboard");
@@ -249,7 +265,7 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
     landing_target.header.stamp = ros::Time::now();
     landing_target.header.frame_id = "/local_origin";
     
-    landing_target.pose.position.x = transform.getOrigin().getX();
+    landing_target.pose.position.x = transform.getOrigin().getX()-pad_target_x_del;
     landing_target.pose.position.y = transform.getOrigin().getY();
     landing_target.pose.position.z = transform.getOrigin().getZ();
     
@@ -294,7 +310,7 @@ void Lander::SetCurrentPose(geometry_msgs::PoseStamped Pmsg){
 
    current_pose = Pmsg;
    
-   if (target_found && (abs(current_pose.pose.position.x - landing_target.pose.position.x) < 0.01) && (abs(current_pose.pose.position.y - landing_target.pose.position.y) < 0.01) ){
+   if (target_found && (abs(current_pose.pose.position.x - landing_target.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - landing_target.pose.position.y) < target_tol) ){
    		ROS_INFO("Setting target_reached to true");
    		target_reached = true;
    }

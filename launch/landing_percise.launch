@@ -1,8 +1,11 @@
 <launch>
-	<arg name="Vel" default="0.5" />
+	<arg name="Vel" default="5.0" />
+	<arg name="xdel" default="2.0" />
 	
        
-        <param name="/mavros/param/MPC_XY_VEL_MAX" value="$(arg Vel)"/>	
+        <param name="/mavros/param/MPC_XY_VEL_MAX" value="$(arg Vel)"/>
+        <param name="pad_to_target_xdelta" value="$(arg xdel)"/>
+	
 	<node name="percise_landing" pkg="mavros_fly" type="mavros_fly_lander" output="screen"/>
 
 </launch>

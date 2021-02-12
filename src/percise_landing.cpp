@@ -11,6 +11,7 @@
 #include <mavros_msgs/ParamPush.h>
 #include <tf/transform_listener.h>
 #include "tf/transform_datatypes.h"
+#include <tf2/buffer_core.h>
 #include <ros/publisher.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <cmath>
@@ -35,7 +36,7 @@ class Lander
       tf::Quaternion q(0,0,0,1);
       transform.setRotation(q);
       
-      local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("mavros/setpoint_position/local", 10);
+      local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local", 10);
       local_set_pose_raw_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);
       
       arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
@@ -71,8 +72,11 @@ class Lander
     tf::TransformListener listener;
     geometry_msgs::PoseStamped landing_target;
     geometry_msgs::PoseStamped current_pose;
+    geometry_msgs::PoseStamped Target_Pose;
     geometry_msgs::Vector3 vel;
     tf::StampedTransform transform;
+    tf2_ros::Buffer buffer_;
+
     mavros_msgs::State current_state;
     
     ros::Publisher tag_loc_pub;
@@ -89,6 +93,10 @@ class Lander
     mavros_msgs::CommandTOL land_cmd;
     mavros_msgs::PositionTarget pose_raw;
     mavros_msgs::ParamPush param_push_msg;
+    
+    
+    
+    
     
     int radio_channel;
 
@@ -114,7 +122,9 @@ class Lander
     
     void FcuState(mavros_msgs::State Statemsg);
 
-    void SetRadio(mavros_msgs::RCIn RCmsg);   
+    void SetRadio(mavros_msgs::RCIn RCmsg);
+    
+    void Update();
    
 
 };
@@ -232,6 +242,8 @@ int main(int argc, char **argv)
         
         }
         
+        AprilTagLander.Update();
+        
         
     
     
@@ -251,7 +263,7 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
 
 
     try{
-      listener.lookupTransform("/local_origin", ap_tag_frame, ros::Time(0), transform);
+      listener.lookupTransform("/fcu", ap_tag_frame, ros::Time(0), transform);
     }
     
     catch (tf::TransformException ex){
@@ -263,7 +275,7 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
     target_found = true;
     
     landing_target.header.stamp = ros::Time::now();
-    landing_target.header.frame_id = "/local_origin";
+    landing_target.header.frame_id = "fcu";
     
     landing_target.pose.position.x = transform.getOrigin().getX()-pad_target_x_del;
     landing_target.pose.position.y = transform.getOrigin().getY();
@@ -279,29 +291,40 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
     
     landing_target.pose.orientation = quat_msg; 
     
-    tag_loc_pub.publish(landing_target);
+
 
 }  
     
 void Lander::EngageLanding(geometry_msgs::PoseStamped uavPosemsg){
 
-    geometry_msgs::PoseStamped Target_Pose;
+    tf2_ros::TransformListener tfListener(buffer_);
     
-    Target_Pose.header.stamp = ros::Time::now();
-    Target_Pose.header.frame_id = "/local_origin";
+
     
-    Target_Pose.pose = current_pose.pose; 
-    Target_Pose.pose.position.x = landing_target.pose.position.x;
-    Target_Pose.pose.position.y = landing_target.pose.position.y;
+    geometry_msgs::PoseStamped Target_Pose_fcu;
+    //Target_Pose_fcu.header = landing_target.header;
+    Target_Pose_fcu.header.stamp = ros::Time::now();
+    Target_Pose_fcu.header.frame_id = "local_origin";
     
+    //Target_Pose.pose = current_pose.pose; 
+    Target_Pose_fcu.pose.position.x = landing_target.pose.position.x;
+    Target_Pose_fcu.pose.position.y = landing_target.pose.position.y;
+    try
+    {
+      buffer_.lookupTransform("fcu","local_origin", ros::Time::now(), ros::Duration(3.0));
+      Target_Pose = buffer_.transform(landing_target, "local_origin");
+      Target_Pose.pose.orientation = current_pose.pose.orientation;
+    }
+    catch(tf::TransformException ex)
+    {
+      ROS_ERROR("%s",ex.what());
+    }
     pose_raw.position = Target_Pose.pose.position;
     pose_raw.velocity = vel;
     pose_raw.type_mask = mavros_msgs::PositionTarget::IGNORE_AFX | mavros_msgs::PositionTarget::IGNORE_AFY | mavros_msgs::PositionTarget::IGNORE_AFZ | mavros_msgs::PositionTarget::IGNORE_YAW | mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
     
     //local_set_pose_raw_pub.publish(pose_raw);
-    if (radio){
-      local_set_pos_pub.publish(Target_Pose);
-    }
+    
 
 
 }
@@ -346,6 +369,23 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
       
    }
    
+}
+
+
+void Lander::Update(){
+
+    if (target_found){
+        
+        tag_loc_pub.publish(landing_target);
+        
+        if (radio){
+          local_set_pos_pub.publish(Target_Pose);
+        }
+    
+    }
+
+
+
 }     
     
     

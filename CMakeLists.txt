@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   mavlink
   tf
   tf2
+  apriltag_ros
 )
 
 ## System dependencies are found with CMake's conventions

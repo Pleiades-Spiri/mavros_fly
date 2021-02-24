@@ -9,6 +9,7 @@
 #include <mavros_msgs/State.h>
 #include <mavros_msgs/RCIn.h>
 #include <mavros_msgs/ParamPush.h>
+#include <apriltag_ros/AprilTagDetectionArray.h>
 #include <tf/transform_listener.h>
 #include "tf/transform_datatypes.h"
 #include <tf2/buffer_core.h>
@@ -29,6 +30,8 @@ class Lander
       target_reached = false;
       offboard = false;
       target_found = false;
+      landing_target_set = false;
+      Target_Pose_set = false;
       radio = false;
       node_handle_ = nh_;
       tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
@@ -111,10 +114,18 @@ class Lander
     bool offboard;
     
     bool target_found;
+    
+    bool tag_visible;
+
+    bool landing_target_set;
+
+    bool Target_Pose_set;
 
     bool radio;
     
     void SetLandingTarget(const tf2_msgs::TFMessageConstPtr& TFmsg);
+    
+    void SetTagVisible(apriltag_ros::AprilTagDetectionArray);
     
     void EngageLanding(geometry_msgs::PoseStamped ApLTmsg);
     
@@ -157,13 +168,14 @@ int main(int argc, char **argv)
     nh.getParam("target_tolerance",target_tolerance);
     
     float pad_to_target_xdelta;
-    nh.param<float>("pad_to_target_xdelta",pad_to_target_xdelta,1.0);
+    nh.param<float>("pad_to_target_xdelta",pad_to_target_xdelta,0.0);
     nh.getParam("pad_to_target_xdelta",pad_to_target_xdelta);
 
     
     Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
+    ros::Subscriber AprilTag_Detection = nh.subscribe("/tag_detections", 1, &Lander::SetTagVisible, &AprilTagLander);
     ros::Subscriber AprilTag_location_sub = nh.subscribe("/aprilTag_landing_location", 10, &Lander::EngageLanding, &AprilTagLander);
     ros::Subscriber CurrentPose_sub = nh.subscribe("/mavros/local_position/pose", 10, &Lander::SetCurrentPose, &AprilTagLander);
     ros::Subscriber radio_sub = nh.subscribe("/mavros/rc/in", 10, &Lander::SetRadio, &AprilTagLander);
@@ -203,7 +215,6 @@ int main(int argc, char **argv)
     
     while(ros::ok()){
     
-
          if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
             
             ROS_INFO("Enabling Offboard");
@@ -262,8 +273,37 @@ int main(int argc, char **argv)
 void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
 
 
+    
+    
+    /*if (!tag_visible){
+          
+      return;
+    }
+
     try{
       listener.lookupTransform("/fcu", ap_tag_frame, ros::Time(0), transform);
+      target_found = true;
+    
+      landing_target.header.stamp = ros::Time::now();
+      landing_target.header.frame_id = "fcu";
+      
+      landing_target.pose.position.x = transform.getOrigin().getX()-pad_target_x_del;
+      landing_target.pose.position.y = transform.getOrigin().getY();
+      landing_target.pose.position.z = transform.getOrigin().getZ();
+      
+      tf::Quaternion quat_tf= transform.getRotation();
+      geometry_msgs::Quaternion quat_msg;
+      
+      tf::quaternionTFToMsg(quat_tf,quat_msg);
+      
+      
+
+      
+      landing_target.pose.orientation = quat_msg;
+
+      landing_target_set = true;
+      
+      tag_loc_pub.publish(landing_target);
     }
     
     catch (tf::TransformException ex){
@@ -271,59 +311,46 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
       //ROS_ERROR("%s",ex.what());
       //ros::Duration(1.0).sleep();
     }
+    */
     
-    target_found = true;
-    
-    landing_target.header.stamp = ros::Time::now();
-    landing_target.header.frame_id = "fcu";
-    
-    landing_target.pose.position.x = transform.getOrigin().getX()-pad_target_x_del;
-    landing_target.pose.position.y = transform.getOrigin().getY();
-    landing_target.pose.position.z = transform.getOrigin().getZ();
-    
-    tf::Quaternion quat_tf= transform.getRotation();
-    geometry_msgs::Quaternion quat_msg;
-    
-    tf::quaternionTFToMsg(quat_tf,quat_msg);
-    
-    
-
-    
-    landing_target.pose.orientation = quat_msg; 
-    
-
-
+     
 }  
     
 void Lander::EngageLanding(geometry_msgs::PoseStamped uavPosemsg){
 
-    tf2_ros::TransformListener tfListener(buffer_);
+    if(Target_Pose_set & landing_target_set){
+        Target_Pose.header.stamp = ros::Time::now();
+        return;
+    }
     
+    if (landing_target_set){
 
-    
-    geometry_msgs::PoseStamped Target_Pose_fcu;
-    //Target_Pose_fcu.header = landing_target.header;
-    Target_Pose_fcu.header.stamp = ros::Time::now();
-    Target_Pose_fcu.header.frame_id = "local_origin";
-    
-    //Target_Pose.pose = current_pose.pose; 
-    Target_Pose_fcu.pose.position.x = landing_target.pose.position.x;
-    Target_Pose_fcu.pose.position.y = landing_target.pose.position.y;
-    try
-    {
-      buffer_.lookupTransform("fcu","local_origin", ros::Time::now(), ros::Duration(3.0));
-      Target_Pose = buffer_.transform(landing_target, "local_origin");
-      Target_Pose.pose.orientation = current_pose.pose.orientation;
+      tf2_ros::TransformListener tfListener(buffer_);
+      
+
+      
+      geometry_msgs::PoseStamped Target_Pose_fcu;
+      //Target_Pose_fcu.header = landing_target.header;
+      Target_Pose_fcu.header.stamp = ros::Time::now();
+      Target_Pose_fcu.header.frame_id = "local_origin";
+      
+      //Target_Pose.pose = current_pose.pose; 
+      Target_Pose_fcu.pose.position.x = landing_target.pose.position.x;
+      Target_Pose_fcu.pose.position.y = landing_target.pose.position.y;
+      try
+      {
+        buffer_.lookupTransform("fcu","local_origin", ros::Time::now(), ros::Duration(3.0));
+        Target_Pose = buffer_.transform(landing_target, "local_origin");
+        Target_Pose.pose.orientation = current_pose.pose.orientation;
+        Target_Pose.pose.position.z = current_pose.pose.position.z;
+        Target_Pose_set = true;
+      }
+      catch(tf::TransformException ex)
+      {
+        //ROS_ERROR("%s",ex.what());
+      }
+
     }
-    catch(tf::TransformException ex)
-    {
-      //ROS_ERROR("%s",ex.what());
-    }
-    Target_Pose.pose.position.z = current_pose.pose.position.z;
-    pose_raw.position = Target_Pose.pose.position;
-    pose_raw.velocity = vel;
-    pose_raw.type_mask = mavros_msgs::PositionTarget::IGNORE_AFX | mavros_msgs::PositionTarget::IGNORE_AFY | mavros_msgs::PositionTarget::IGNORE_AFZ | mavros_msgs::PositionTarget::IGNORE_YAW | mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
-    
     //local_set_pose_raw_pub.publish(pose_raw);
     
 
@@ -334,7 +361,7 @@ void Lander::SetCurrentPose(geometry_msgs::PoseStamped Pmsg){
 
    current_pose = Pmsg;
    
-   if (target_found && (abs(current_pose.pose.position.x - landing_target.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - landing_target.pose.position.y) < target_tol) ){
+   if (target_found && (abs(current_pose.pose.position.x - Target_Pose.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) < target_tol) ){
    		ROS_INFO("Setting target_reached to true");
    		target_reached = true;
    }
@@ -372,14 +399,61 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
    
 }
 
+void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
+
+  if(DectArr.detections.size()>0)
+  {
+    tag_visible = true;
+    
+    try{
+      listener.lookupTransform("/fcu", ap_tag_frame, ros::Time(0), transform);
+      target_found = true;
+    
+      landing_target.header.stamp = ros::Time::now();
+      landing_target.header.frame_id = "fcu";
+      
+      landing_target.pose.position.x = transform.getOrigin().getX()-pad_target_x_del;
+      landing_target.pose.position.y = transform.getOrigin().getY();
+      landing_target.pose.position.z = transform.getOrigin().getZ();
+      
+      tf::Quaternion quat_tf= transform.getRotation();
+      geometry_msgs::Quaternion quat_msg;
+      
+      tf::quaternionTFToMsg(quat_tf,quat_msg);
+      
+      
+
+      
+      landing_target.pose.orientation = quat_msg;
+
+      landing_target_set = true;
+      
+      tag_loc_pub.publish(landing_target);
+    }
+    
+    catch (tf::TransformException ex){
+      return;
+      //ROS_ERROR("%s",ex.what());
+      //ros::Duration(1.0).sleep();
+    }
+  }
+  
+  else
+  {
+    tag_visible = false;
+  }
+
+}
+
+
 
 void Lander::Update(){
 
-    if (target_found){
+    if (target_found & landing_target_set){
         
-        tag_loc_pub.publish(landing_target);
+        //tag_loc_pub.publish(landing_target);
         
-        if (radio){
+        if (radio & Target_Pose_set & landing_target_set){
           local_set_pos_pub.publish(Target_Pose);
         }
     

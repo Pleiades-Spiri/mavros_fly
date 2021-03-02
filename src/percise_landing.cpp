@@ -222,7 +222,6 @@ int main(int argc, char **argv)
     
     while(ros::ok()){
     
-         AprilTagLander.radio = true;
     
          if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
             

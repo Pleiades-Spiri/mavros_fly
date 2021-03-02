@@ -40,7 +40,7 @@ from std_srvs.srv import Empty, EmptyResponse
 from geometry_msgs.msg import Vector3, Point, PoseStamped, TwistStamped, PointStamped
 from mavros_msgs.msg import PositionTarget, State
 from mavros_msgs.srv import CommandBool, SetMode
-from mavros_apriltag_tracking.srv import PIDGains, PIDGainsResponse
+from mavros_fly.srv import PIDGains, PIDGainsResponse
 
 class FCUModes:
     def __init__(self):

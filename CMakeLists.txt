@@ -18,6 +18,11 @@ find_package(catkin REQUIRED COMPONENTS
   apriltag_ros
 )
 
+add_service_files(
+   FILES
+   PIDGains.srv
+)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 

@@ -2,9 +2,11 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/Vector3.h>
+#include <geometry_msgs/Point.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/PositionTarget.h>
 #include <mavros_msgs/CommandTOL.h>
+#include <mavros_msgs/PositionTarget.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
 #include <mavros_msgs/RCIn.h>
@@ -32,9 +34,11 @@ class Lander
       target_found = false;
       landing_target_set = false;
       Target_Pose_set = false;
+      Pid_Set = false;
       radio = false;
       node_handle_ = nh_;
       tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
+      tag_loc_point_pub = nh_.advertise<geometry_msgs::Point>("/aprilTag_landing_point",10);
       transform.setOrigin(tf::Vector3(0,0,0));
       tf::Quaternion q(0,0,0,1);
       transform.setRotation(q);
@@ -83,6 +87,7 @@ class Lander
     mavros_msgs::State current_state;
     
     ros::Publisher tag_loc_pub;
+    ros::Publisher tag_loc_point_pub;
     ros::NodeHandle node_handle_;
     
     ros::Publisher local_set_pos_pub;
@@ -96,6 +101,7 @@ class Lander
     mavros_msgs::CommandTOL land_cmd;
     mavros_msgs::PositionTarget pose_raw;
     mavros_msgs::ParamPush param_push_msg;
+    mavros_msgs::PositionTarget pid_vel_target;
     
     
     
@@ -120,12 +126,16 @@ class Lander
     bool landing_target_set;
 
     bool Target_Pose_set;
+    
+    bool Pid_Set;
 
     bool radio;
     
     void SetLandingTarget(const tf2_msgs::TFMessageConstPtr& TFmsg);
     
     void SetTagVisible(apriltag_ros::AprilTagDetectionArray);
+   
+    void SetRawVel(mavros_msgs::PositionTarget PIDmsg);
     
     void EngageLanding(geometry_msgs::PoseStamped ApLTmsg);
     
@@ -136,6 +146,8 @@ class Lander
     void SetRadio(mavros_msgs::RCIn RCmsg);
     
     void Update();
+
+   
    
 
 };
@@ -179,6 +191,7 @@ int main(int argc, char **argv)
     ros::Subscriber AprilTag_location_sub = nh.subscribe("/aprilTag_landing_location", 10, &Lander::EngageLanding, &AprilTagLander);
     ros::Subscriber CurrentPose_sub = nh.subscribe("/mavros/local_position/pose", 10, &Lander::SetCurrentPose, &AprilTagLander);
     ros::Subscriber radio_sub = nh.subscribe("/mavros/rc/in", 10, &Lander::SetRadio, &AprilTagLander);
+    ros::Subscriber pid_sub = nh.subscribe("/pid/setpoint_raw/local", 10, &Lander::SetRawVel, &AprilTagLander);
     
 
     ros::Subscriber state_sub = nh.subscribe("mavros/state", 100, &Lander::FcuState, &AprilTagLander);
@@ -194,19 +207,13 @@ int main(int argc, char **argv)
     }
 
 
-    /*for(int i = 100; ros::ok() && i > 0; --i){
-        AprilTagLander.local_set_pos_pub.publish(AprilTagLander.landing_target);
-        ros::spinOnce();
-        rate.sleep();
-    }*/
+    
 
     mavros_msgs::SetMode offb_set_mode;
     offb_set_mode.request.custom_mode = "OFFBOARD";
 
 
-    //mavros_msgs::CommandBool arm_cmd;
-    //arm_cmd.request.value = true;
-
+    
     
 
     ros::Time last_request = ros::Time::now();
@@ -214,6 +221,8 @@ int main(int argc, char **argv)
     
     
     while(ros::ok()){
+    
+         AprilTagLander.radio = true;
     
          if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
             
@@ -351,7 +360,7 @@ void Lander::EngageLanding(geometry_msgs::PoseStamped uavPosemsg){
       }
 
     }
-    //local_set_pose_raw_pub.publish(pose_raw);
+
     
 
 
@@ -381,8 +390,8 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
    if (RCmsg.channels[radio_channel] == 2006 && !radio){
       radio = true;
       std::cout<<"Radio activated"<<std::endl;
-      node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",approuch_vel);
-      parameter_set_client.call(param_push_msg);
+      //node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",approuch_vel);
+      //parameter_set_client.call(param_push_msg);
       
    }
    else if (radio && RCmsg.channels[radio_channel] != 2006){
@@ -390,9 +399,10 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
       offboard = false;
       target_reached = false;
       target_found = false;
+      Pid_Set = false;
       std::cout<<"Radio deactivated"<<std::endl;
-      node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",12.0);
-      parameter_set_client.call(param_push_msg);
+      //node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",12.0);
+      //parameter_set_client.call(param_push_msg);
       
       
    }
@@ -429,6 +439,7 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
       landing_target_set = true;
       
       tag_loc_pub.publish(landing_target);
+      tag_loc_point_pub.publish(landing_target.pose.position);
     }
     
     catch (tf::TransformException ex){
@@ -453,14 +464,24 @@ void Lander::Update(){
         
         //tag_loc_pub.publish(landing_target);
         
-        if (radio & Target_Pose_set & landing_target_set){
-          local_set_pos_pub.publish(Target_Pose);
+        if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set){
+          //local_set_pos_pub.publish(Target_Pose);
+          local_set_pose_raw_pub.publish(pid_vel_target);
         }
     
     }
 
+}
 
 
+void Lander::SetRawVel(mavros_msgs::PositionTarget Pmsg){
+
+  pid_vel_target = Pmsg;
+  if (pid_vel_target.velocity.x > 0.01 || pid_vel_target.velocity.y > 0.01){
+	  pid_vel_target.velocity.z = 0;
+	}
+  Pid_Set = true;
+  
 }     
     
     

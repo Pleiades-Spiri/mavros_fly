@@ -3,6 +3,7 @@
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Point.h>
+#include <geometry_msgs/TwistStamped.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/PositionTarget.h>
 #include <mavros_msgs/CommandTOL.h>
@@ -15,6 +16,7 @@
 #include <tf/transform_listener.h>
 #include "tf/transform_datatypes.h"
 #include <tf2/buffer_core.h>
+#include <tf/transform_broadcaster.h>
 #include <ros/publisher.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <cmath>
@@ -45,6 +47,7 @@ class Lander
       
       local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local", 10);
       local_set_pose_raw_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);
+      setpoint_vel_pub = nh_.advertise<geometry_msgs::TwistStamped>("/mavros/setpoint_velocity/cmd_vel", 10);
       
       arming_client = nh_.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
 
@@ -81,8 +84,12 @@ class Lander
     geometry_msgs::PoseStamped current_pose;
     geometry_msgs::PoseStamped Target_Pose;
     geometry_msgs::Vector3 vel;
+    geometry_msgs::TwistStamped Target_Yaw;
     tf::StampedTransform transform;
     tf2_ros::Buffer buffer_;
+    tf::TransformBroadcaster br;
+    tf::Transform landing_offset_frame;
+
 
     mavros_msgs::State current_state;
     
@@ -92,6 +99,7 @@ class Lander
     
     ros::Publisher local_set_pos_pub;
     ros::Publisher local_set_pose_raw_pub;
+    ros::Publisher setpoint_vel_pub;
     
     ros::ServiceClient arming_client;
     ros::ServiceClient set_mode_client;
@@ -102,6 +110,8 @@ class Lander
     mavros_msgs::PositionTarget pose_raw;
     mavros_msgs::ParamPush param_push_msg;
     mavros_msgs::PositionTarget pid_vel_target;
+    
+    float target_yaw;
     
     
     
@@ -222,7 +232,8 @@ int main(int argc, char **argv)
     
     while(ros::ok()){
     
-    
+         AprilTagLander.radio = true;
+
          if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
             
             ROS_INFO("Enabling Offboard");
@@ -413,19 +424,28 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
   if(DectArr.detections.size()>0)
   {
     tag_visible = true;
+    landing_offset_frame.setOrigin( tf::Vector3(0.0, 0.0, pad_target_x_del) );
+    landing_offset_frame.setRotation( tf::Quaternion(-0.5, 0.5, 0.5, 0.5) );
+    br.sendTransform(tf::StampedTransform(landing_offset_frame, ros::Time::now(), ap_tag_frame ,"landingTF"));
+    tf::StampedTransform transformTag;
+    
     
     try{
-      listener.lookupTransform("/fcu", ap_tag_frame, ros::Time(0), transform);
+      listener.lookupTransform("/fcu", "landingTF", ros::Time(0), transform);
       target_found = true;
     
       landing_target.header.stamp = ros::Time::now();
       landing_target.header.frame_id = "fcu";
       
-      landing_target.pose.position.x = transform.getOrigin().getX()-pad_target_x_del;
+      landing_target.pose.position.x = transform.getOrigin().getX();
       landing_target.pose.position.y = transform.getOrigin().getY();
       landing_target.pose.position.z = transform.getOrigin().getZ();
       
       tf::Quaternion quat_tf= transform.getRotation();
+
+      target_yaw = tf::getYaw(quat_tf);
+
+      
       geometry_msgs::Quaternion quat_msg;
       
       tf::quaternionTFToMsg(quat_tf,quat_msg);
@@ -464,8 +484,15 @@ void Lander::Update(){
         //tag_loc_pub.publish(landing_target);
         
         if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set){
-          //local_set_pos_pub.publish(Target_Pose);
-          local_set_pose_raw_pub.publish(pid_vel_target);
+          if (fabs(target_yaw) > 0.05){
+            Target_Yaw.header = landing_target.header;
+            Target_Yaw.twist.angular.z = target_yaw * 2.0;
+            setpoint_vel_pub.publish(Target_Yaw); 
+          }
+          else
+          {
+            local_set_pose_raw_pub.publish(pid_vel_target);
+          }
         }
     
     }
@@ -477,8 +504,8 @@ void Lander::SetRawVel(mavros_msgs::PositionTarget Pmsg){
 
   pid_vel_target = Pmsg;
   if (pid_vel_target.velocity.x > 0.01 || pid_vel_target.velocity.y > 0.01){
-	  pid_vel_target.velocity.z = 0;
-	}
+      pid_vel_target.velocity.z = 0;
+  }
   Pid_Set = true;
   
 }     

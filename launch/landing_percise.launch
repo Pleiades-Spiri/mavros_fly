@@ -47,17 +47,17 @@
          
           <!--<remap from="setpoint/relative_pos" to="/aprilTag_landing_point"/>-->
           <!-- Lateral controller gains -->
-          <param name="horizontal_controller/kP" value="1.5"/>
+          <param name="horizontal_controller/kP" value="2.0"/>
           <param name="horizontal_controller/kI" value="0.01"/>
 
           <!-- Vertical controller gains -->
-          <param name="vertical_controller/kP" value="1.5"/>
+          <param name="vertical_controller/kP" value="2.0"/>
           <param name="vertical_controller/kI" value="0.01"/>
 
           <!-- Maximum horizontal vlocity magnitude -->
-          <param name="horizontal_controller/vMAX" value="1.0"/>
+          <param name="horizontal_controller/vMAX" value="6.0"/>
           <!-- Maximum verical vlocity magnitude -->
-          <param name="vertical_controller/vUpMAX" value="1.0"/>
+          <param name="vertical_controller/vUpMAX" value="2.0"/>
           <param name="vertical_controller/vDownMAX" value="0.5"/>
       </node>
 
@@ -77,7 +77,7 @@
           <!-- Controller setpoint topic-->
           <param name="setpoint_topic" value="setpoint/relative_pos"/>
           <!-- Desired alttitude above tag in meters. Should be positive-->
-          <param name="alt_from_tag" value="0.5"/>
+          <param name="alt_from_tag" value="0.0"/>
       </node>
 
      

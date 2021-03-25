@@ -2,6 +2,8 @@
 
 Nodes for fly controlling using mavros
 
+test
+
 # Build
 
 Clone the repo to your workspace and `catkin build mavros_fly`

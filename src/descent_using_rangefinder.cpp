@@ -42,16 +42,16 @@ void range_sensor_cb(const sensor_msgs::Range::ConstPtr& rangeMsg){
 
     if(range_msg.range>required_height){
         goal_pose = current_pose;
-        goal_pose.pose.position.z = current_pose.pose.position.z - 0.01;
+        goal_pose.pose.position.z = current_pose.pose.position.z - 0.1;
     
     }
-    else if (required_height-range_msg.range>0.2){
+    else if (required_height-range_msg.range>0.5){
         goal_pose = current_pose;
-        goal_pose.pose.position.z = current_pose.pose.position.z + 0.01;
+        goal_pose.pose.position.z = current_pose.pose.position.z + 0.1;
     
     }
     else{
-        ros::Duration(0.1).sleep();
+        ros::Duration(0.2).sleep();
         if (Sampling_time == -1){
             Sampling_time = 0;
         }
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
       }
 
 
-      local_pos_pub.publish(goal_pose);
+        local_pos_pub.publish(goal_pose);
 
 
         ros::spinOnce();

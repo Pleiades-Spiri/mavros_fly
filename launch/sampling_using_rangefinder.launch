@@ -1,13 +1,16 @@
 <launch>
 
-    <arg name="Alt" default="1.0" />
+    <arg name="Alt" default="3.0" />
     <arg name="RangeTopic" default="/Range_filtered"/>
     <arg name="WP" default="0"/>
 
     <param name="alt" value="$(arg Alt)"/>
     <param name="TargetWP" value="$(arg WP)"/>
 
-    <node name="range_mean" pkg="mavros_fly" type="mavros_fly_range_to_range_filter_chain"/>
+    <param name="FilterSize" type="double" value="20" />
+
+    <node pkg="mavros_fly" type="mavros_fly_range_median_filter" name="median_filter"/>
+
     
     <node pkg="mavros_fly" type="mavros_fly_descent_using_rangefinder" name="RangeFinder_Descent" args="/mavros/distance_sensor/range:=$(arg RangeTopic)" output="screen"/>
 

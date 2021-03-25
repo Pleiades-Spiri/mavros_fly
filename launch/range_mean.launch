@@ -1,6 +1,6 @@
 <launch>
 
-        <arg name="cut_off_freq" default="0.25" />
+        <arg name="cut_off_freq" default="0.01" />
         <arg name="delta_t" default="0.1"/>
 
         <param name="cut_off_frequancy" value="$(arg cut_off_freq)"/>

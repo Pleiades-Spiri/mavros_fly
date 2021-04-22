@@ -45,7 +45,9 @@ class Lander
       tf::Quaternion q(0,0,0,1);
       transform.setRotation(q);
       
-      local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local", 10);
+      pos_set_mode.request.custom_mode = "POSCTL";
+      
+      local_set_pos_pub = nh_.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local", 25);
       local_set_pose_raw_pub = nh_.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 10);
       setpoint_vel_pub = nh_.advertise<geometry_msgs::TwistStamped>("/mavros/setpoint_velocity/cmd_vel", 10);
       
@@ -110,6 +112,7 @@ class Lander
     mavros_msgs::PositionTarget pose_raw;
     mavros_msgs::ParamPush param_push_msg;
     mavros_msgs::PositionTarget pid_vel_target;
+    mavros_msgs::SetMode pos_set_mode;
     
     float target_yaw;
     
@@ -192,6 +195,19 @@ int main(int argc, char **argv)
     float pad_to_target_xdelta;
     nh.param<float>("pad_to_target_xdelta",pad_to_target_xdelta,0.0);
     nh.getParam("pad_to_target_xdelta",pad_to_target_xdelta);
+    
+    int mode;
+    nh.param<int>("mode",mode,1);
+    nh.getParam("mode",mode);
+    
+    if (mode==1)
+    {
+    		std::cout << "Using Velocity Control " << std::endl;
+    }
+    else
+    {
+    		std::cout << "Using Position Control" << std::endl;
+    }
 
     
     Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta);
@@ -217,14 +233,11 @@ int main(int argc, char **argv)
     }
 
 
-    
 
     mavros_msgs::SetMode offb_set_mode;
     offb_set_mode.request.custom_mode = "OFFBOARD";
+       
 
-
-    
-    
 
     ros::Time last_request = ros::Time::now();
     
@@ -233,38 +246,46 @@ int main(int argc, char **argv)
     while(ros::ok()){
     
 
-         if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
+         if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
+         {
             
             ROS_INFO("Enabling Offboard");
             
-            if(AprilTagLander.set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){
+            if(AprilTagLander.set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent)
+            {
                 ROS_INFO("Offboard enabled");
             }
             
             last_request = ros::Time::now();
          
          }
-         else{
+         else
+         {
             
-            if (!AprilTagLander.offboard){
+            if (!AprilTagLander.offboard)
+            {
               ROS_INFO("Vehicle not ready");
             } 
          
          } 
          
 
-        if (AprilTagLander.current_state.mode == "OFFBOARD" && AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0))){
+        if (AprilTagLander.current_state.mode == "OFFBOARD" && AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
+        {
 
-            if (AprilTagLander.landing_client.call(AprilTagLander.land_cmd) && AprilTagLander.land_cmd.response.success){
+            if (AprilTagLander.landing_client.call(AprilTagLander.land_cmd) && AprilTagLander.land_cmd.response.success)
+            {
                 ROS_INFO("Goal Reached Landing");
             }
             
             last_request = ros::Time::now();
         }
         
-        if (AprilTagLander.current_state.mode == "OFFBOARD"){
+        if (AprilTagLander.current_state.mode == "OFFBOARD")
+        {
         		
-        		if (!AprilTagLander.offboard){
+        		if (!AprilTagLander.offboard)
+        		{
         			ROS_INFO("setting offboard to true");
         			AprilTagLander.offboard = true;
         		}
@@ -273,9 +294,6 @@ int main(int argc, char **argv)
         
         AprilTagLander.Update();
         
-        
-    
-    
     
         ros::spinOnce();
         rate.sleep();
@@ -293,19 +311,19 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
 
     
     
-    /*if (!tag_visible){
-          
+    if (!tag_visible)
+    {
       return;
     }
 
-    try{
-      listener.lookupTransform("/fcu", ap_tag_frame, ros::Time(0), transform);
-      target_found = true;
+    try
+    {
+      listener.lookupTransform("/local_origin", "/tagTF", ros::Time(0), transform);
     
       landing_target.header.stamp = ros::Time::now();
-      landing_target.header.frame_id = "fcu";
+      landing_target.header.frame_id = "local_origin";
       
-      landing_target.pose.position.x = transform.getOrigin().getX()-pad_target_x_del;
+      landing_target.pose.position.x = transform.getOrigin().getX();
       landing_target.pose.position.y = transform.getOrigin().getY();
       landing_target.pose.position.z = transform.getOrigin().getZ();
       
@@ -314,22 +332,17 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
       
       tf::quaternionTFToMsg(quat_tf,quat_msg);
       
-      
-
-      
       landing_target.pose.orientation = quat_msg;
-
-      landing_target_set = true;
       
-      tag_loc_pub.publish(landing_target);
     }
     
-    catch (tf::TransformException ex){
+    catch (tf::TransformException ex)
+    {
       return;
       //ROS_ERROR("%s",ex.what());
       //ros::Duration(1.0).sleep();
     }
-    */
+    
     
      
 }  
@@ -478,21 +491,40 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
 
 void Lander::Update(){
 
-    if (target_found & landing_target_set){
+    if (target_found & landing_target_set)
+    {
         
         //tag_loc_pub.publish(landing_target);
-        
-        if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set){
-          if (fabs(target_yaw) > 0.05){
-            Target_Yaw.header = landing_target.header;
-            Target_Yaw.twist.angular.z = target_yaw * 2.0;
-            setpoint_vel_pub.publish(Target_Yaw); 
-          }
-          else
-          {
-            local_set_pose_raw_pub.publish(pid_vel_target);
-          }
-        }
+
+				    if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set)
+				    {
+				        //local_set_pose_raw_pub.publish(pid_vel_target);
+				        if (mode==1)
+				        {
+										if (fabs(target_yaw) > 0.05)
+										{
+										  Target_Yaw.header = landing_target.header;
+										  Target_Yaw.twist.angular.z = target_yaw * 2.0;
+										  setpoint_vel_pub.publish(Target_Yaw); 
+										}
+										else
+										{
+										  local_set_pose_raw_pub.publish(pid_vel_target);
+										}
+								}
+								else
+								{
+								
+										local_set_pos_pub.publish(landing_target);
+								
+								}
+										
+				    }
+				   else if (!tag_visible)
+				   {
+					    set_mode_client.call(pos_set_mode);
+				   }
+           
     
     }
 

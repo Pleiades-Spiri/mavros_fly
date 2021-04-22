@@ -1,6 +1,6 @@
 <launch>
 
-      <include file="$(find apriltag_ros)/launch/continuous_detection.launch" />
+      <!--<include file="$(find apriltag_ros)/launch/continuous_detection.launch" />-->
 
 
 
@@ -8,12 +8,17 @@
       <arg name="Vel" default="5.0" />
       <arg name="xdel" default="0.0" />
       <arg name="tol" default="0.0" />
+      <arg name="ctlMode" default="0.0" />
 
      
       <param name="/mavros/param/MPC_XY_VEL_MAX" value="$(arg Vel)"/>
       <param name="pad_to_target_xdelta" value="$(arg xdel)"/>
       <param name="target_tolerance" value="$(arg tol)"/>
-      <node name="percise_landing" pkg="mavros_fly" type="mavros_fly_lander" output="screen"/>
+      <param name="mode" value="$(arg ctlMode)"/>
+      <node name="percise_landing" pkg="mavros_fly" type="mavros_fly_lander" output="screen">
+      	<remap from="tag_detections" to="stereo/tag_detections"/>
+
+      </node>
 
 
 
@@ -47,17 +52,16 @@
          
           <!--<remap from="setpoint/relative_pos" to="/aprilTag_landing_point"/>-->
           <!-- Lateral controller gains -->
-          <param name="horizontal_controller/kP" value="2.0"/>
-          <param name="horizontal_controller/kI" value="0.01"/>
-
+          <param name="horizontal_controller/kP" value="0.2"/>
+          <param name="horizontal_controller/kI" value="0.1"/>
           <!-- Vertical controller gains -->
-          <param name="vertical_controller/kP" value="2.0"/>
-          <param name="vertical_controller/kI" value="0.01"/>
+          <param name="vertical_controller/kP" value="0.2"/>
+          <param name="vertical_controller/kI" value="0.1"/>
 
           <!-- Maximum horizontal vlocity magnitude -->
-          <param name="horizontal_controller/vMAX" value="6.0"/>
+          <param name="horizontal_controller/vMAX" value="2.0"/>
           <!-- Maximum verical vlocity magnitude -->
-          <param name="vertical_controller/vUpMAX" value="2.0"/>
+          <param name="vertical_controller/vUpMAX" value="1.0"/>
           <param name="vertical_controller/vDownMAX" value="0.5"/>
       </node>
 

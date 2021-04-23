@@ -121,6 +121,8 @@ class Lander
     
     
     int radio_channel;
+    
+    int landing_mode;
 
     double approuch_vel;
     
@@ -200,6 +202,7 @@ int main(int argc, char **argv)
     nh.param<int>("mode",mode,1);
     nh.getParam("mode",mode);
     
+    
     if (mode==1)
     {
     		std::cout << "Using Velocity Control " << std::endl;
@@ -213,7 +216,7 @@ int main(int argc, char **argv)
     Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
-    ros::Subscriber AprilTag_Detection = nh.subscribe("/tag_detections", 1, &Lander::SetTagVisible, &AprilTagLander);
+    ros::Subscriber AprilTag_Detection = nh.subscribe("/tag_detections", 10, &Lander::SetTagVisible, &AprilTagLander);
     ros::Subscriber AprilTag_location_sub = nh.subscribe("/aprilTag_landing_location", 10, &Lander::EngageLanding, &AprilTagLander);
     ros::Subscriber CurrentPose_sub = nh.subscribe("/mavros/local_position/pose", 10, &Lander::SetCurrentPose, &AprilTagLander);
     ros::Subscriber radio_sub = nh.subscribe("/mavros/rc/in", 10, &Lander::SetRadio, &AprilTagLander);
@@ -221,6 +224,8 @@ int main(int argc, char **argv)
     
 
     ros::Subscriber state_sub = nh.subscribe("mavros/state", 100, &Lander::FcuState, &AprilTagLander);
+    
+    AprilTagLander.landing_mode = mode;
 
    
     
@@ -245,7 +250,7 @@ int main(int argc, char **argv)
     
     while(ros::ok()){
     
-
+         AprilTagLander.radio = true; /////!!!!Warning/////
          if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
          {
             
@@ -318,7 +323,7 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
 
     try
     {
-      listener.lookupTransform("/local_origin", "/tagTF", ros::Time(0), transform);
+      listener.lookupTransform("/local_origin", "/landingTF", ros::Time(0), transform);
     
       landing_target.header.stamp = ros::Time::now();
       landing_target.header.frame_id = "local_origin";
@@ -443,7 +448,7 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
     
     
     try{
-      listener.lookupTransform("/fcu", "landingTF", ros::Time(0), transform);
+      listener.lookupTransform("/fcu", "/landingTF", ros::Time(0), transform);
       target_found = true;
     
       landing_target.header.stamp = ros::Time::now();
@@ -499,7 +504,7 @@ void Lander::Update(){
 				    if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set)
 				    {
 				        //local_set_pose_raw_pub.publish(pid_vel_target);
-				        if (mode==1)
+				        if (landing_mode==1)
 				        {
 										if (fabs(target_yaw) > 0.05)
 										{
@@ -522,7 +527,7 @@ void Lander::Update(){
 				    }
 				   else if (!tag_visible)
 				   {
-					    set_mode_client.call(pos_set_mode);
+					    //set_mode_client.call(pos_set_mode);
 				   }
            
     

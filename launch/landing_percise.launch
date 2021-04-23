@@ -16,7 +16,7 @@
       <param name="target_tolerance" value="$(arg tol)"/>
       <param name="mode" value="$(arg ctlMode)"/>
       <node name="percise_landing" pkg="mavros_fly" type="mavros_fly_lander" output="screen">
-      	<remap from="tag_detections" to="stereo/tag_detections"/>
+      	<remap from="tag_detections" to="tag_detections"/>
 
       </node>
 

@@ -52,17 +52,17 @@
          
           <!--<remap from="setpoint/relative_pos" to="/aprilTag_landing_point"/>-->
           <!-- Lateral controller gains -->
-          <param name="horizontal_controller/kP" value="0.2"/>
-          <param name="horizontal_controller/kI" value="0.1"/>
+          <param name="horizontal_controller/kP" value="2.2"/>
+          <param name="horizontal_controller/kI" value="0.01"/>
           <!-- Vertical controller gains -->
-          <param name="vertical_controller/kP" value="0.2"/>
-          <param name="vertical_controller/kI" value="0.1"/>
+          <param name="vertical_controller/kP" value="2.2"/>
+          <param name="vertical_controller/kI" value="0.01"/>
 
           <!-- Maximum horizontal vlocity magnitude -->
-          <param name="horizontal_controller/vMAX" value="2.0"/>
+          <param name="horizontal_controller/vMAX" value="0.5"/>
           <!-- Maximum verical vlocity magnitude -->
           <param name="vertical_controller/vUpMAX" value="1.0"/>
-          <param name="vertical_controller/vDownMAX" value="0.5"/>
+          <param name="vertical_controller/vDownMAX" value="0.1"/>
       </node>
 
       <!-- Tag setpoint publisher 

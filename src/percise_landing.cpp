@@ -37,6 +37,7 @@ class Lander
       landing_target_set = false;
       Target_Pose_set = false;
       Pid_Set = false;
+      target_z_set = false;
       radio = false;
       node_handle_ = nh_;
       tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
@@ -83,6 +84,7 @@ class Lander
     std::string ap_tag_frame;
     tf::TransformListener listener;
     geometry_msgs::PoseStamped landing_target;
+    geometry_msgs::PoseStamped landing_target_local;
     geometry_msgs::PoseStamped current_pose;
     geometry_msgs::PoseStamped Target_Pose;
     geometry_msgs::Vector3 vel;
@@ -115,6 +117,7 @@ class Lander
     mavros_msgs::SetMode pos_set_mode;
     
     float target_yaw;
+    float target_z;
     
     
     
@@ -143,6 +146,8 @@ class Lander
     bool Target_Pose_set;
     
     bool Pid_Set;
+    
+    bool target_z_set;
 
     bool radio;
     
@@ -216,7 +221,7 @@ int main(int argc, char **argv)
     Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
-    ros::Subscriber AprilTag_Detection = nh.subscribe("/tag_detections", 10, &Lander::SetTagVisible, &AprilTagLander);
+    ros::Subscriber AprilTag_Detection = nh.subscribe("/stereo/tag_detections", 10, &Lander::SetTagVisible, &AprilTagLander);
     ros::Subscriber AprilTag_location_sub = nh.subscribe("/aprilTag_landing_location", 10, &Lander::EngageLanding, &AprilTagLander);
     ros::Subscriber CurrentPose_sub = nh.subscribe("/mavros/local_position/pose", 10, &Lander::SetCurrentPose, &AprilTagLander);
     ros::Subscriber radio_sub = nh.subscribe("/mavros/rc/in", 10, &Lander::SetRadio, &AprilTagLander);
@@ -250,7 +255,7 @@ int main(int argc, char **argv)
     
     while(ros::ok()){
     
-         AprilTagLander.radio = true; /////!!!!Warning/////
+         //AprilTagLander.radio = true; /////!!!!Warning/////
          if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
          {
             
@@ -277,10 +282,10 @@ int main(int argc, char **argv)
 
         if (AprilTagLander.current_state.mode == "OFFBOARD" && AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
         {
-
+            ROS_INFO("Goal Reached Request Landing");
             if (AprilTagLander.landing_client.call(AprilTagLander.land_cmd) && AprilTagLander.land_cmd.response.success)
             {
-                ROS_INFO("Goal Reached Landing");
+                ROS_INFO("Request Landing Sent");
             }
             
             last_request = ros::Time::now();
@@ -325,19 +330,19 @@ void Lander::SetLandingTarget(const tf2_msgs::TFMessageConstPtr& tfmsg){
     {
       listener.lookupTransform("/local_origin", "/landingTF", ros::Time(0), transform);
     
-      landing_target.header.stamp = ros::Time::now();
-      landing_target.header.frame_id = "local_origin";
+      landing_target_local.header.stamp = ros::Time::now();
+      landing_target_local.header.frame_id = "local_origin";
       
-      landing_target.pose.position.x = transform.getOrigin().getX();
-      landing_target.pose.position.y = transform.getOrigin().getY();
-      landing_target.pose.position.z = transform.getOrigin().getZ();
+      landing_target_local.pose.position.x = transform.getOrigin().getX();
+      landing_target_local.pose.position.y = transform.getOrigin().getY();
+      landing_target_local.pose.position.z = transform.getOrigin().getZ();
       
       tf::Quaternion quat_tf= transform.getRotation();
       geometry_msgs::Quaternion quat_msg;
       
       tf::quaternionTFToMsg(quat_tf,quat_msg);
       
-      landing_target.pose.orientation = quat_msg;
+      landing_target_local.pose.orientation = quat_msg;
       
     }
     
@@ -401,6 +406,8 @@ void Lander::SetCurrentPose(geometry_msgs::PoseStamped Pmsg){
    		ROS_INFO("Setting target_reached to true");
    		target_reached = true;
    }
+   
+   
 
 
 }  
@@ -417,6 +424,13 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
    if (RCmsg.channels[radio_channel] == 2006 && !radio){
       radio = true;
       std::cout<<"Radio activated"<<std::endl;
+      if (!target_z_set)
+      {
+          target_z = current_pose.pose.position.z;
+          target_z_set = true;
+       
+       
+      }
       //node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",approuch_vel);
       //parameter_set_client.call(param_push_msg);
       
@@ -427,6 +441,7 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
       target_reached = false;
       target_found = false;
       Pid_Set = false;
+      target_z_set = false;
       std::cout<<"Radio deactivated"<<std::endl;
       //node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",12.0);
       //parameter_set_client.call(param_push_msg);
@@ -495,18 +510,25 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
 
 
 void Lander::Update(){
+    std::cout<<"target_found " << target_found <<std::endl;
+    std::cout<<"landing_target_set " << landing_target_set <<std::endl;
 
     if (target_found & landing_target_set)
     {
         
         //tag_loc_pub.publish(landing_target);
+            std::cout<<"radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set: "; 
+            std::cout<<  (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set) <<std::endl;
+            
+            std::cout<<"landing mode = ";
+            std::cout<<landing_mode<<std::endl;
 
 				    if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set)
 				    {
 				        //local_set_pose_raw_pub.publish(pid_vel_target);
 				        if (landing_mode==1)
 				        {
-										if (fabs(target_yaw) > 0.05)
+										if (fabs(target_yaw) > 0.2)
 										{
 										  Target_Yaw.header = landing_target.header;
 										  Target_Yaw.twist.angular.z = target_yaw * 2.0;
@@ -516,18 +538,39 @@ void Lander::Update(){
 										{
 										  local_set_pose_raw_pub.publish(pid_vel_target);
 										}
+										
+										if ((abs(current_pose.pose.position.x - Target_Pose.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) < target_tol))
+                    {
+                      landing_client.call(land_cmd);
+                    }
+                    
+                    if ((abs(pid_vel_target.velocity.x) < target_tol) && (abs(pid_vel_target.velocity.y) < target_tol))
+                    {
+                      landing_client.call(land_cmd);
+                    }
+                    
 								}
 								else
 								{
+										if ((abs(current_pose.pose.position.x - Target_Pose.pose.position.x) > target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) > target_tol))
+                    {
+                        geometry_msgs::PoseStamped Constant_Alt_landing_target;
+                        Constant_Alt_landing_target = landing_target_local;
+                        Constant_Alt_landing_target.pose.position.z =  current_pose.pose.position.z;
+										    local_set_pos_pub.publish(Constant_Alt_landing_target);
 								
-										local_set_pos_pub.publish(landing_target);
-								
-								}
+								    }
+								    else
+								    {
+								        landing_client.call(land_cmd);
+								    }
+
+                }
 										
 				    }
 				   else if (!tag_visible)
 				   {
-					    //set_mode_client.call(pos_set_mode);
+					    set_mode_client.call(pos_set_mode);
 				   }
            
     
@@ -539,7 +582,9 @@ void Lander::Update(){
 void Lander::SetRawVel(mavros_msgs::PositionTarget Pmsg){
 
   pid_vel_target = Pmsg;
-  if (pid_vel_target.velocity.x > 0.01 || pid_vel_target.velocity.y > 0.01){
+  //pid_vel_target.type_mask = 4067;
+  //pid_vel_target.position.z = target_z;
+  if (abs(pid_vel_target.velocity.x) > 0.1 || abs(pid_vel_target.velocity.y) > 0.1){
       pid_vel_target.velocity.z = 0;
   }
   Pid_Set = true;

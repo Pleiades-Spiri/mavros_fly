@@ -385,8 +385,8 @@ class Commander:
 	"""
 	Modification by Safy 01March2021 : swap the velocity vector between x and -y 
 	"""
-        self.setpoint_.velocity.x = -self.vel_setpoint_.y
-        self.setpoint_.velocity.y = self.vel_setpoint_.x
+        self.setpoint_.velocity.x = self.vel_setpoint_.x
+        self.setpoint_.velocity.y = self.vel_setpoint_.y
         self.setpoint_.velocity.z = self.vel_setpoint_.z
 
         self.setpoint_.yaw = self.yaw_setpoint_ * pi / 180. # convert to radians

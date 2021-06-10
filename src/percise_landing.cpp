@@ -28,7 +28,7 @@ class Lander
 {
   public: 
 
-    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel, double aVel, double TargTol, double PadTagD){
+    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel, double aVel, double TargTol, double PadTagDX, double PadTagDY){
     
       ap_tag_frame = AprilFrame;
       target_reached = false;
@@ -39,11 +39,13 @@ class Lander
       Pid_Set = false;
       target_z_set = false;
       radio = false;
+      calibrate = false;
       node_handle_ = nh_;
       tag_loc_pub = nh_.advertise<geometry_msgs::PoseStamped>("/aprilTag_landing_location",10);
       tag_loc_point_pub = nh_.advertise<geometry_msgs::Point>("/aprilTag_landing_point",10);
       transform.setOrigin(tf::Vector3(0,0,0));
       tf::Quaternion q(0,0,0,1);
+      Tag_fcu_Rot = tf::Quaternion(-0.5, 0.5, 0.5, 0.5);
       transform.setRotation(q);
       
       pos_set_mode.request.custom_mode = "POSCTL";
@@ -76,7 +78,10 @@ class Lander
       
       target_tol = TargTol;
       
-      pad_target_x_del = PadTagD;
+      pad_target_x_del = PadTagDX;
+      pad_target_y_del = PadTagDY;
+      pad_target_z_del = 0.0;
+      
 
     
     }
@@ -93,6 +98,8 @@ class Lander
     tf2_ros::Buffer buffer_;
     tf::TransformBroadcaster br;
     tf::Transform landing_offset_frame;
+    tf::StampedTransform Tag_to_fcu_transform;
+    tf::Quaternion Tag_fcu_Rot;
 
 
     mavros_msgs::State current_state;
@@ -133,6 +140,10 @@ class Lander
     
     double pad_target_x_del;
     
+    double pad_target_y_del;
+    
+    double pad_target_z_del;
+    
     bool target_reached;
     
     bool offboard;
@@ -151,6 +162,8 @@ class Lander
 
     bool radio;
     
+    bool calibrate;
+    
     void SetLandingTarget(const tf2_msgs::TFMessageConstPtr& TFmsg);
     
     void SetTagVisible(apriltag_ros::AprilTagDetectionArray);
@@ -164,6 +177,8 @@ class Lander
     void FcuState(mavros_msgs::State Statemsg);
 
     void SetRadio(mavros_msgs::RCIn RCmsg);
+    
+    void calibrateXY();
     
     void Update();
 
@@ -203,6 +218,10 @@ int main(int argc, char **argv)
     nh.param<float>("pad_to_target_xdelta",pad_to_target_xdelta,0.0);
     nh.getParam("pad_to_target_xdelta",pad_to_target_xdelta);
     
+    float pad_to_target_ydelta;
+    nh.param<float>("pad_to_target_ydelta",pad_to_target_ydelta,0.0);
+    nh.getParam("pad_to_target_ydelta",pad_to_target_ydelta);
+    
     int mode;
     nh.param<int>("mode",mode,1);
     nh.getParam("mode",mode);
@@ -218,7 +237,7 @@ int main(int argc, char **argv)
     }
 
     
-    Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta);
+    Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta,pad_to_target_ydelta);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
     ros::Subscriber AprilTag_Detection = nh.subscribe("/stereo/tag_detections", 10, &Lander::SetTagVisible, &AprilTagLander);
@@ -256,51 +275,53 @@ int main(int argc, char **argv)
     while(ros::ok()){
     
          //AprilTagLander.radio = true; /////!!!!Warning/////
-         if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
-         {
-            
-            ROS_INFO("Enabling Offboard");
-            
-            if(AprilTagLander.set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent)
-            {
-                ROS_INFO("Offboard enabled");
-            }
-            
-            last_request = ros::Time::now();
          
-         }
-         else
-         {
-            
-            if (!AprilTagLander.offboard)
-            {
-              ROS_INFO("Vehicle not ready");
-            } 
-         
-         } 
-         
+           if (AprilTagLander.radio && !AprilTagLander.offboard && AprilTagLander.current_state.armed && AprilTagLander.current_state.mode != "OFFBOARD" && !AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
+           {
+              
+              ROS_INFO("Enabling Offboard");
+              
+              if(AprilTagLander.set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent)
+              {
+                  ROS_INFO("Offboard enabled");
+              }
+              
+              last_request = ros::Time::now();
+           
+           }
+           else
+           {
+              
+              if (!AprilTagLander.offboard)
+              {
+                ROS_INFO("Vehicle not ready");
+              } 
+           
+           } 
+           
 
-        if (AprilTagLander.current_state.mode == "OFFBOARD" && AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
-        {
-            ROS_INFO("Goal Reached Request Landing");
-            if (AprilTagLander.landing_client.call(AprilTagLander.land_cmd) && AprilTagLander.land_cmd.response.success)
-            {
-                ROS_INFO("Request Landing Sent");
-            }
-            
-            last_request = ros::Time::now();
-        }
-        
-        if (AprilTagLander.current_state.mode == "OFFBOARD")
-        {
-        		
-        		if (!AprilTagLander.offboard)
-        		{
-        			ROS_INFO("setting offboard to true");
-        			AprilTagLander.offboard = true;
-        		}
-        
-        }
+          if (AprilTagLander.current_state.mode == "OFFBOARD" && AprilTagLander.target_reached && (ros::Time::now() - last_request > ros::Duration(5.0)))
+          {
+              ROS_INFO("Goal Reached Request Landing");
+              if (AprilTagLander.landing_client.call(AprilTagLander.land_cmd) && AprilTagLander.land_cmd.response.success)
+              {
+                  ROS_INFO("Request Landing Sent");
+              }
+              
+              last_request = ros::Time::now();
+          }
+          
+          if (AprilTagLander.current_state.mode == "OFFBOARD")
+          {
+          		
+          		if (!AprilTagLander.offboard)
+          		{
+          			ROS_INFO("setting offboard to true");
+          			AprilTagLander.offboard = true;
+          		}
+          
+          }
+      
         
         AprilTagLander.Update();
         
@@ -407,9 +428,6 @@ void Lander::SetCurrentPose(geometry_msgs::PoseStamped Pmsg){
    		target_reached = true;
    }
    
-   
-
-
 }  
 
 
@@ -444,9 +462,20 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
       target_z_set = false;
       std::cout<<"Radio deactivated"<<std::endl;
       //node_handle_.setParam("/mavros/param/MPC_XY_VEL_MAX",12.0);
-      //parameter_set_client.call(param_push_msg);
+      //parameter_set_client.call(param_push_msg);   
       
+   }
+   
+   if (!current_state.armed && RCmsg.channels[radio_channel] == 982)
+   {
+      calibrate = true;
+      std::cout<< "setting calibrate to true "<< std::endl;  
+   }
+   
+   if (current_state.armed|| RCmsg.channels[radio_channel] != 982){
       
+      calibrate = false; 
+      std::cout<< "setting calibrate to false "<< std::endl;  
    }
    
 }
@@ -456,11 +485,17 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
   if(DectArr.detections.size()>0)
   {
     tag_visible = true;
-    landing_offset_frame.setOrigin( tf::Vector3(0.0, 0.0, pad_target_x_del) );
-    landing_offset_frame.setRotation( tf::Quaternion(-0.5, 0.5, 0.5, 0.5) );
+    landing_offset_frame.setOrigin( tf::Vector3(pad_target_y_del, pad_target_z_del, pad_target_x_del) );
+    //landing_offset_frame.setRotation( tf::Quaternion(-0.5, 0.5, 0.5, 0.5) );
+    landing_offset_frame.setRotation(Tag_fcu_Rot);
+    std::cout<<Tag_fcu_Rot<<std::endl;
     br.sendTransform(tf::StampedTransform(landing_offset_frame, ros::Time::now(), ap_tag_frame ,"landingTF"));
     tf::StampedTransform transformTag;
     
+    if(calibrate)
+    {
+      calibrateXY();
+    }
     
     try{
       listener.lookupTransform("/fcu", "/landingTF", ros::Time(0), transform);
@@ -483,6 +518,7 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
       tf::quaternionTFToMsg(quat_tf,quat_msg);
       
       
+      
 
       
       landing_target.pose.orientation = quat_msg;
@@ -494,8 +530,8 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
     }
     
     catch (tf::TransformException ex){
+      ROS_ERROR("%s",ex.what());
       return;
-      //ROS_ERROR("%s",ex.what());
       //ros::Duration(1.0).sleep();
     }
   }
@@ -507,7 +543,29 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
 
 }
 
-
+void Lander::calibrateXY()
+{
+   std::cout<<"Calibrating"<<std::endl;
+   try{
+      listener.lookupTransform(ap_tag_frame, "/fcu", ros::Time(0), Tag_to_fcu_transform);
+      pad_target_x_del = Tag_to_fcu_transform.getOrigin().getZ();
+      pad_target_y_del = Tag_to_fcu_transform.getOrigin().getX();
+      pad_target_z_del = Tag_to_fcu_transform.getOrigin().getY();
+      
+      Tag_fcu_Rot = Tag_to_fcu_transform.getRotation();
+      std::cout<<"pad_target_x_del";
+      std::cout<<pad_target_x_del<<std::endl;
+      std::cout<<"pad_target_y_del";
+      std::cout<<pad_target_y_del<<std::endl;
+      }
+   catch (tf::TransformException ex){
+      ROS_ERROR("%s",ex.what());
+      return;
+      
+      //ros::Duration(1.0).sleep();
+    }
+      
+}
 
 void Lander::Update(){
     std::cout<<"target_found " << target_found <<std::endl;

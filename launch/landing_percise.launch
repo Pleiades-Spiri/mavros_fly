@@ -8,7 +8,7 @@
       <arg name="Vel" default="5.0" />
       <arg name="xdel" default="0.0" />
       <arg name="tol" default="0.0" />
-      <arg name="ctlMode" default="0.0" />
+      <arg name="ctlMode" default="1.0" />
 
      
       <param name="/mavros/param/MPC_XY_VEL_MAX" value="$(arg Vel)"/>
@@ -52,7 +52,7 @@
          
           <!--<remap from="setpoint/relative_pos" to="/aprilTag_landing_point"/>-->
           <!-- Lateral controller gains -->
-          <param name="horizontal_controller/kP" value="2.2"/>
+          <param name="horizontal_controller/kP" value="1.1"/>
           <param name="horizontal_controller/kI" value="0.01"/>
           <!-- Vertical controller gains -->
           <param name="vertical_controller/kP" value="2.2"/>

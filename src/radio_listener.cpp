@@ -18,6 +18,7 @@ class Listener{
       Cam_Gain_channel = GainCH;
       Cam_Exp_channel = ExpCH;
       Armed = true;
+      camctrl = false;
       Radio_restart_FCU = false;
       Radio_restart_OBC = false;
       Restart_Req_Sent = false;
@@ -33,6 +34,7 @@ class Listener{
     ros::ServiceClient Reboot_FCU;
     
     bool Armed;
+    bool camctrl;
     
     bool Radio_restart_FCU;
     bool Radio_restart_OBC;
@@ -76,12 +78,20 @@ int main(int argc, char **argv)
     int cam_exp_channel_num;
     nh.param<int>("cam_exp_channel_num",cam_exp_channel_num,12);
     nh.getParam("cam_exp_channel_num",cam_exp_channel_num);
+    
+    bool camera_ctrl;
+    nh.param<bool>("camera_ctrl",camera_ctrl,false);
+    nh.getParam("camera_ctrl",camera_ctrl);
+    
+    
 
 
 
     
     
     Listener Listen(nh,fcu_restart_channel_num,cam_gain_channel_num,cam_exp_channel_num);
+    
+    Listen.camctrl = camera_ctrl;
     
     ros::Subscriber radio_sub = nh.subscribe("/mavros/rc/in", 10, &Listener::Radio, &Listen);
     
@@ -128,18 +138,23 @@ int main(int argc, char **argv)
         }
         
         if (Listen.NewGainValue != Listen.GainValue){
-            
-            std::cout<<system(("v4l2-ctl -d /dev/video0 -c gain="+ std::to_string(Listen.NewGainValue)).c_str())<<std::endl;
-            std::cout<<system(("v4l2-ctl -d /dev/video1 -c gain="+ std::to_string(Listen.NewGainValue)).c_str())<<std::endl;
-            Listen.GainValue = Listen.NewGainValue;
+        
+            if (Listen.camctrl)
+            {
+              std::cout<<system(("v4l2-ctl -d /dev/video0 -c gain="+ std::to_string(Listen.NewGainValue)).c_str())<<std::endl;
+              std::cout<<system(("v4l2-ctl -d /dev/video1 -c gain="+ std::to_string(Listen.NewGainValue)).c_str())<<std::endl;
+              Listen.GainValue = Listen.NewGainValue;
+            }
         
         }
         
         if (Listen.NewExpValue != Listen.ExpValue){
-            
-            std::cout<<system(("v4l2-ctl -d /dev/video0 -c exposure="+ std::to_string(Listen.NewExpValue)).c_str())<<std::endl;
-            std::cout<<system(("v4l2-ctl -d /dev/video1 -c exposure="+ std::to_string(Listen.NewExpValue)).c_str())<<std::endl;
-            Listen.ExpValue = Listen.NewExpValue;
+            if (Listen.camctrl)
+            {
+              std::cout<<system(("v4l2-ctl -d /dev/video0 -c exposure="+ std::to_string(Listen.NewExpValue)).c_str())<<std::endl;
+              std::cout<<system(("v4l2-ctl -d /dev/video1 -c exposure="+ std::to_string(Listen.NewExpValue)).c_str())<<std::endl;
+              Listen.ExpValue = Listen.NewExpValue;
+            }
         
         }
         

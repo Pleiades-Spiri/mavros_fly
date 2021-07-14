@@ -1,4 +1,8 @@
-<launch>	
-	<node name="radio_listener" pkg="mavros_fly" type="mavros_fly_radio_listen" output="screen"/>
+<launch>
+      <arg name="cam_ctrl" default="false" />
+      <param name="camera_ctrl" value="$(arg cam_ctrl)"/>
+      	
+	    <node name="radio_listener" pkg="mavros_fly" type="mavros_fly_radio_listen" output="screen"/>
+
 
 </launch>

@@ -229,11 +229,11 @@ int main(int argc, char **argv)
     
     if (mode==1)
     {
-    		std::cout << "Using Velocity Control " << std::endl;
+        std::cout << "Using Velocity Control " << std::endl;
     }
     else
     {
-    		std::cout << "Using Position Control" << std::endl;
+        std::cout << "Using Position Control" << std::endl;
     }
 
     
@@ -313,12 +313,12 @@ int main(int argc, char **argv)
           
           if (AprilTagLander.current_state.mode == "OFFBOARD")
           {
-          		
-          		if (!AprilTagLander.offboard)
-          		{
-          			ROS_INFO("setting offboard to true");
-          			AprilTagLander.offboard = true;
-          		}
+              
+              if (!AprilTagLander.offboard)
+              {
+                ROS_INFO("setting offboard to true");
+                AprilTagLander.offboard = true;
+              }
           
           }
       
@@ -424,8 +424,8 @@ void Lander::SetCurrentPose(geometry_msgs::PoseStamped Pmsg){
    current_pose = Pmsg;
    
    if (target_found && (abs(current_pose.pose.position.x - Target_Pose.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) < target_tol) ){
-   		ROS_INFO("Setting target_reached to true");
-   		target_reached = true;
+       ROS_INFO("Setting target_reached to true");
+       target_reached = true;
    }
    
 }  
@@ -581,23 +581,23 @@ void Lander::Update(){
             std::cout<<"landing mode = ";
             std::cout<<landing_mode<<std::endl;
 
-				    if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set)
-				    {
-				        //local_set_pose_raw_pub.publish(pid_vel_target);
-				        if (landing_mode==1)
-				        {
-										if (fabs(target_yaw) > 0.2)
-										{
-										  Target_Yaw.header = landing_target.header;
-										  Target_Yaw.twist.angular.z = target_yaw * 2.0;
-										  setpoint_vel_pub.publish(Target_Yaw); 
-										}
-										else
-										{
-										  local_set_pose_raw_pub.publish(pid_vel_target);
-										}
-										
-										if ((abs(current_pose.pose.position.x - Target_Pose.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) < target_tol))
+            if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set)
+            {
+                //local_set_pose_raw_pub.publish(pid_vel_target);
+                if (landing_mode==1)
+                {
+                    if (fabs(target_yaw) > 0.2)
+                    {
+                      Target_Yaw.header = landing_target.header;
+                      Target_Yaw.twist.angular.z = target_yaw * 2.0;
+                      setpoint_vel_pub.publish(Target_Yaw); 
+                    }
+                    else
+                    {
+                      local_set_pose_raw_pub.publish(pid_vel_target);
+                    }
+                    
+                    if ((abs(current_pose.pose.position.x - Target_Pose.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) < target_tol))
                     {
                       landing_client.call(land_cmd);
                     }
@@ -607,29 +607,29 @@ void Lander::Update(){
                       landing_client.call(land_cmd);
                     }
                     
-								}
-								else
-								{
-										if ((abs(current_pose.pose.position.x - Target_Pose.pose.position.x) > target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) > target_tol))
+                }
+                else
+                {
+                    if ((abs(current_pose.pose.position.x - Target_Pose.pose.position.x) > target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) > target_tol))
                     {
                         geometry_msgs::PoseStamped Constant_Alt_landing_target;
                         Constant_Alt_landing_target = landing_target_local;
                         Constant_Alt_landing_target.pose.position.z =  current_pose.pose.position.z;
-										    local_set_pos_pub.publish(Constant_Alt_landing_target);
-								
-								    }
-								    else
-								    {
-								        landing_client.call(land_cmd);
-								    }
+                        local_set_pos_pub.publish(Constant_Alt_landing_target);
+                
+                    }
+                    else
+                    {
+                        landing_client.call(land_cmd);
+                    }
 
                 }
-										
-				    }
-				   else if (!tag_visible)
-				   {
-					    set_mode_client.call(pos_set_mode);
-				   }
+                    
+            }
+           else if (!tag_visible)
+           {
+              set_mode_client.call(pos_set_mode);
+           }
            
     
     }
@@ -642,7 +642,7 @@ void Lander::SetRawVel(mavros_msgs::PositionTarget Pmsg){
   pid_vel_target = Pmsg;
   //pid_vel_target.type_mask = 4067;
   //pid_vel_target.position.z = target_z;
-  if (abs(pid_vel_target.velocity.x) > 0.1 || abs(pid_vel_target.velocity.y) > 0.1){
+  if (abs(pid_vel_target.velocity.x) > 0.05 || abs(pid_vel_target.velocity.y) > 0.05){
       pid_vel_target.velocity.z = 0;
   }
   Pid_Set = true;

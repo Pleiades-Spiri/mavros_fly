@@ -28,7 +28,7 @@ class Lander
 {
   public: 
 
-    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel, double aVel, double TargTol, double PadTagDX, double PadTagDY){
+    Lander(std::string AprilFrame, ros::NodeHandle nh_, int channel, double aVel, double TargTol, double VolTol, double PadTagDX, double PadTagDY){
     
       ap_tag_frame = AprilFrame;
       target_reached = false;
@@ -77,6 +77,7 @@ class Lander
       approuch_vel = aVel;
       
       target_tol = TargTol;
+      vol_tol = VolTol;
       
       pad_target_x_del = PadTagDX;
       pad_target_y_del = PadTagDY;
@@ -137,6 +138,8 @@ class Lander
     double approuch_vel;
     
     double target_tol;
+
+    double vol_tol;
     
     double pad_target_x_del;
     
@@ -213,6 +216,10 @@ int main(int argc, char **argv)
     float target_tolerance;
     nh.param<float>("target_tolerance",target_tolerance,0.1);
     nh.getParam("target_tolerance",target_tolerance);
+
+    float vol_tolerance;
+    nh.param<float>("vol_tolerance",vol_tolerance,0.01);
+    nh.getParam("vol_tolerance",vol_tolerance);
     
     float pad_to_target_xdelta;
     nh.param<float>("pad_to_target_xdelta",pad_to_target_xdelta,0.0);
@@ -237,7 +244,7 @@ int main(int argc, char **argv)
     }
 
     
-    Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,pad_to_target_xdelta,pad_to_target_ydelta);
+    Lander AprilTagLander(apriltag_frame,nh,channel_num,mavros_param_MPC_XY_VEL_MAX,target_tolerance,vol_tolerance,pad_to_target_xdelta,pad_to_target_ydelta);
     
     ros::Subscriber TFsub = nh.subscribe("/tf", 10, &Lander::SetLandingTarget, &AprilTagLander);
     ros::Subscriber AprilTag_Detection = nh.subscribe("/stereo/tag_detections", 10, &Lander::SetTagVisible, &AprilTagLander);
@@ -475,7 +482,7 @@ void Lander::SetRadio(mavros_msgs::RCIn RCmsg){
    if (current_state.armed|| RCmsg.channels[radio_channel] != 982){
       
       calibrate = false; 
-      std::cout<< "setting calibrate to false "<< std::endl;  
+      //std::cout<< "setting calibrate to false "<< std::endl;  
    }
    
 }
@@ -488,7 +495,7 @@ void Lander::SetTagVisible(apriltag_ros::AprilTagDetectionArray DectArr){
     landing_offset_frame.setOrigin( tf::Vector3(pad_target_y_del, pad_target_z_del, pad_target_x_del) );
     //landing_offset_frame.setRotation( tf::Quaternion(-0.5, 0.5, 0.5, 0.5) );
     landing_offset_frame.setRotation(Tag_fcu_Rot);
-    std::cout<<Tag_fcu_Rot<<std::endl;
+    //std::cout<<Tag_fcu_Rot<<std::endl;
     br.sendTransform(tf::StampedTransform(landing_offset_frame, ros::Time::now(), ap_tag_frame ,"landingTF"));
     tf::StampedTransform transformTag;
     
@@ -568,18 +575,18 @@ void Lander::calibrateXY()
 }
 
 void Lander::Update(){
-    std::cout<<"target_found " << target_found <<std::endl;
-    std::cout<<"landing_target_set " << landing_target_set <<std::endl;
+    //std::cout<<"target_found " << target_found <<std::endl;
+    //std::cout<<"landing_target_set " << landing_target_set <<std::endl;
 
     if (target_found & landing_target_set)
     {
         
         //tag_loc_pub.publish(landing_target);
-            std::cout<<"radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set: "; 
-            std::cout<<  (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set) <<std::endl;
+            //std::cout<<"radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set: "; 
+            //std::cout<<  (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set) <<std::endl;
             
-            std::cout<<"landing mode = ";
-            std::cout<<landing_mode<<std::endl;
+            //std::cout<<"landing mode = ";
+            //std::cout<<landing_mode<<std::endl;
 
             if (radio & Target_Pose_set & landing_target_set & tag_visible & Pid_Set)
             {
@@ -597,14 +604,26 @@ void Lander::Update(){
                       local_set_pose_raw_pub.publish(pid_vel_target);
                     }
                     
-                    if ((abs(current_pose.pose.position.x - Target_Pose.pose.position.x) < target_tol) && (abs(current_pose.pose.position.y - Target_Pose.pose.position.y) < target_tol))
+                    std::cout<<"Position differance : "<< std::endl;
+                    std::cout<<abs(landing_target.pose.position.x)<< std::endl;
+                    std::cout<<abs(landing_target.pose.position.y)<< std::endl;
+
+                    
+                    if ((abs(landing_target.pose.position.x) < target_tol) && (abs(landing_target.pose.position.y) < target_tol))
                     {
-                      landing_client.call(land_cmd);
+                      if (current_state.mode != "AUTO.LAND")
+                      {
+                        //landing_client.call(land_cmd);
+			target_reached = true;
+                      }
                     }
                     
-                    if ((abs(pid_vel_target.velocity.x) < target_tol) && (abs(pid_vel_target.velocity.y) < target_tol))
+                    if ((abs(pid_vel_target.velocity.x) < vol_tol) && (abs(pid_vel_target.velocity.y) < vol_tol))
                     {
-                      landing_client.call(land_cmd);
+                      if (current_state.mode != "AUTO.LAND")
+                      {
+                        //landing_client.call(land_cmd);
+                      }
                     }
                     
                 }

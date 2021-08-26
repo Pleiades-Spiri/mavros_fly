@@ -57,11 +57,11 @@
           <param name="horizontal_controller/kP" value="1.0"/>
           <param name="horizontal_controller/kI" value="0.01"/>
           <!-- Vertical controller gains -->
-          <param name="vertical_controller/kP" value="2.2"/>
+          <param name="vertical_controller/kP" value="1.0"/>
           <param name="vertical_controller/kI" value="0.01"/>
 
           <!-- Maximum horizontal vlocity magnitude -->
-          <param name="horizontal_controller/vMAX" value="0.5"/>
+          <param name="horizontal_controller/vMAX" value="0.6"/>
           <!-- Maximum verical vlocity magnitude -->
           <param name="vertical_controller/vUpMAX" value="1.0"/>
           <param name="vertical_controller/vDownMAX" value="0.1"/>

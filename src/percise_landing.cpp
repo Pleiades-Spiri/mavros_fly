@@ -609,7 +609,7 @@ void Lander::Update(){
                     std::cout<<abs(landing_target.pose.position.y)<< std::endl;
 
                     
-                    if ((abs(landing_target.pose.position.x) < target_tol) && (abs(landing_target.pose.position.y) < target_tol))
+                    if ((abs(landing_target.pose.position.x) < target_tol) && (abs(landing_target.pose.position.y) < target_tol) )
                     {
                       if (current_state.mode != "AUTO.LAND")
                       {

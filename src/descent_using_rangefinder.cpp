@@ -10,11 +10,13 @@
 float required_height = 1.0;
 float required_x = 0.0;
 float required_y = 0.0;
+int mav_cmd_number = 183;
 mavros_msgs::State current_state;
 geometry_msgs::PoseStamped current_pose, goal_pose;
 bool goal=false;
 bool goal_set=false;
 bool offboard_enabled = false;
+bool mission_cmd_match = false;
 
 float Sampling_time = -1;
 
@@ -34,12 +36,15 @@ void local_pose_cb(const geometry_msgs::PoseStamped::ConstPtr& msg){
 
 void range_sensor_cb(const sensor_msgs::Range::ConstPtr& rangeMsg){
     
+    if (!offboard_enabled){
+
+    	return;
+    }
     ros::Time Start = ros::Time::now();
     sensor_msgs::Range range_msg = *rangeMsg;
     if (!goal){
         std::cout<<"Range Value :"<<range_msg.range<<std::endl;
     }    
-
     if(range_msg.range>required_height){
         goal_pose = current_pose;
         goal_pose.pose.position.z = current_pose.pose.position.z - 0.1;
@@ -72,7 +77,26 @@ void range_sensor_cb(const sensor_msgs::Range::ConstPtr& rangeMsg){
 
 void mission_cb(const mavros_msgs::WaypointList::ConstPtr& WayMsg){
   mavros_msgs::WaypointList WayList = *WayMsg;
+  mavros_msgs::Waypoint Waypoint;
   current_mission_point = WayList.current_seq;
+  for (int i=0; i<WayList.waypoints.size();i++){
+	Waypoint = WayList.waypoints[i];
+	if (Waypoint.command==mav_cmd_number){
+		target_mission_point = i;
+		std::cout<<"target_mission_point "<< target_mission_point << std::endl;
+	}   	
+
+  }
+  if (current_mission_point >= target_mission_point){
+  	mission_cmd_match = true;
+  	std::cout<<"mission match"<<std::endl;
+  }
+  else{
+  	std::cout<<"no match"<<std::endl;
+  	std::cout<<WayList.waypoints[current_mission_point].command<<std::endl;
+
+  }
+
   std::cout << "current mission point"<<current_mission_point<<std::endl;
 
 }
@@ -88,6 +112,10 @@ int main(int argc, char **argv)
     
     nh.param<int>("TargetWP",target_mission_point,-1);
     nh.getParam("TargetWP",target_mission_point);
+
+	nh.param<int>("Target_mav_cmd",mav_cmd_number,183);
+    nh.getParam("Target_mav_cmd",mav_cmd_number);
+
     
     //required_height = std::stof(Alt_str,&sz);
     
@@ -113,7 +141,7 @@ int main(int argc, char **argv)
                 ("/mavros/distance_sensor/range", 10, range_sensor_cb);
                 
     ros::Subscriber mission_sub = nh.subscribe<mavros_msgs::WaypointList>
-                ("/mavros/mission/waypoints",10,mission_cb);            
+                ("/mavros/mission/waypoints",1,mission_cb);         
                 
     ros::Publisher local_pos_pub = nh.advertise<geometry_msgs::PoseStamped>
             ("mavros/setpoint_position/local", 10);
@@ -148,6 +176,10 @@ int main(int argc, char **argv)
     mavros_msgs::SetMode offb_set_mode;
     offb_set_mode.request.custom_mode = "OFFBOARD";
 
+    mavros_msgs::SetMode mission_set_mode;
+    mission_set_mode.request.custom_mode = "AUTO.MISSION";
+
+
 
     //mavros_msgs::CommandBool arm_cmd;
     //arm_cmd.request.value = true;
@@ -161,40 +193,38 @@ int main(int argc, char **argv)
 
       if(!goal){
 
-          if (current_mission_point == target_mission_point && current_state.mode != "OFFBOARD" &&
-              (ros::Time::now() - last_request > ros::Duration(5.0)) && !offboard_enabled){
+          if (mission_cmd_match && current_state.mode != "OFFBOARD" && (ros::Time::now() - last_request > ros::Duration(5.0)) && !offboard_enabled){
               ROS_INFO("Enabling Offboard");
-              if( set_mode_client.call(offb_set_mode) &&
-                  offb_set_mode.response.mode_sent){
+              
+              if( set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){
                   ROS_INFO("Offboard enabled");
                   offboard_enabled = true;
               }
+
               last_request = ros::Time::now();
+
           } else {
-              if( !current_state.armed &&
-                  (ros::Time::now() - last_request > ros::Duration(5.0))){
+              
+              if (!current_state.armed && (ros::Time::now() - last_request > ros::Duration(5.0))){
                   std::cout << "Vehicle not armed" << std::endl; 
                   last_request = ros::Time::now();
               }
           }
 
-          if (current_state.mode == "OFFBOARD" && (ros::Time::now() - last_request > ros::Duration(5.0))){
-              
-              //local_pos_pub.publish(goal_pose);
-
-          }
       }
       else {
               
-          
             std::cout<<"Mission accomplished"<<std::endl;
-            offb_set_mode.request.custom_mode = "AUTO.MISSION";
-            if( set_mode_client.call(offb_set_mode) && offb_set_mode.response.mode_sent){
-                  ROS_INFO("Mission mode enabled");
-                  return 1;
-            }
-          
+            mission_cmd_match = false;
+            offboard_enabled =false;
+            goal=false;
+            goal_set=false;
+            Sampling_time = -1;
 
+            if( set_mode_client.call(mission_set_mode) && mission_set_mode.response.mode_sent){
+                  ROS_INFO("Mission mode enabled");
+
+            }
          
       }
 

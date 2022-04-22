@@ -2,16 +2,19 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <mavros_msgs/CommandBool.h>
 #include <mavros_msgs/CommandTOL.h>
+#include <mavros_msgs/CommandLong.h>
 #include <mavros_msgs/SetMode.h>
 #include <mavros_msgs/State.h>
 #include <sensor_msgs/Range.h>
 #include <mavros_msgs/WaypointList.h>
 
-float required_height = 1.0;
+float required_height = 0.5;
 float required_x = 0.0;
 float required_y = 0.0;
-int mav_cmd_number = 183;
+int mav_cmd_number = 530;
+
 mavros_msgs::State current_state;
+mavros_msgs::CommandLong sampler_land_cmd;
 geometry_msgs::PoseStamped current_pose, goal_pose;
 bool goal=false;
 bool goal_set=false;
@@ -20,7 +23,7 @@ bool mission_cmd_match = false;
 bool time_set=false;
 
 
-ros::Time sampling_time;
+ros::Time release_time;
 
 int current_mission_point = -1;
 
@@ -40,7 +43,7 @@ void range_sensor_cb(const sensor_msgs::Range::ConstPtr& rangeMsg){
     
     if (!offboard_enabled || !mission_cmd_match){
 
-    	return;
+        return;
     }
     ros::Time Start = ros::Time::now();
     sensor_msgs::Range range_msg = *rangeMsg;
@@ -59,17 +62,16 @@ void range_sensor_cb(const sensor_msgs::Range::ConstPtr& rangeMsg){
     }
     else{
         goal_pose = current_pose;
-
         if (!time_set){
-            sampling_time = ros::Time::now() + ros::Duration(5.0);
+            release_time = ros::Time::now() + ros::Duration(5.0);
             time_set = true;
         }
         
-        if((sampling_time - ros::Time::now()).toSec() > 0 ){
-            std::cout<<"sampling_time duration "<<(sampling_time - ros::Time::now()).toSec()<<std::endl;
+        if((release_time - ros::Time::now()).toSec() > 0 ){
+            std::cout<<"release_time duration "<<release_time<<std::endl;
         }
         else{
-            std::cout<<"Sampling Done"<<std::endl;
+            std::cout<<"release_time Done"<<std::endl;
             goal = true;
         }
     }
@@ -82,20 +84,20 @@ void mission_cb(const mavros_msgs::WaypointList::ConstPtr& WayMsg){
   mavros_msgs::Waypoint Waypoint;
   current_mission_point = WayList.current_seq;
   for (int i=0; i<WayList.waypoints.size();i++){
-	Waypoint = WayList.waypoints[i];
-	if (Waypoint.command==mav_cmd_number){
-		target_mission_point = i;
-		std::cout<<"target_mission_point "<< target_mission_point << std::endl;
-	}   	
+    Waypoint = WayList.waypoints[i];
+    if (Waypoint.command==mav_cmd_number){
+        target_mission_point = i;
+        std::cout<<"target_mission_point "<< target_mission_point << std::endl;
+    }       
 
   }
-  if (current_mission_point >= target_mission_point && target_mission_point != -1){
-  	mission_cmd_match = true;
-  	std::cout<<"mission match"<<std::endl;
+  if (current_mission_point >= target_mission_point){
+    mission_cmd_match = true;
+    std::cout<<"mission match"<<std::endl;
   }
   else{
-  	std::cout<<"no match"<<std::endl;
-  	std::cout<<WayList.waypoints[current_mission_point].command<<std::endl;
+    std::cout<<"no match"<<std::endl;
+    std::cout<<WayList.waypoints[current_mission_point].command<<std::endl;
 
   }
 
@@ -105,18 +107,18 @@ void mission_cb(const mavros_msgs::WaypointList::ConstPtr& WayMsg){
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv,"descent_using_rangefinder");
+    ros::init(argc, argv,"land_sampler");
     ros::NodeHandle nh;
     
    
-    //nh.param<float>("alt",required_height,1.0);
-    //nh.getParam("alt",required_height);
+    nh.param<float>("sampler_land_alt",required_height,1.0);
+    nh.getParam("sampler_land_alt",required_height);
     
     //nh.param<int>("TargetWP",target_mission_point,-1);
     //nh.getParam("TargetWP",target_mission_point);
 
-	  nh.param<int>("Target_mav_cmd",mav_cmd_number,183);
-    nh.getParam("Target_mav_cmd",mav_cmd_number);
+    nh.param<int>("land_mav_cmd",mav_cmd_number,530);
+    nh.getParam("land_mav_cmd",mav_cmd_number);
 
     
     //required_height = std::stof(Alt_str,&sz);
@@ -152,17 +154,21 @@ int main(int argc, char **argv)
 
     ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>
             ("mavros/set_mode");
-            
-            
 
-    //the setpoint publishing rate MUST be faster than 2Hz
+    ros::ServiceClient mav_cmd_client = nh.serviceClient<mavros_msgs::CommandLong>
+            ("mavros/cmd/command");
+
+    
     ros::Rate rate(20.0);
 
-    // wait for FCU connection
+
     while(ros::ok() && !current_state.connected){
         ros::spinOnce();
         rate.sleep();
-    }
+    }        
+            
+
+
 
 
     mavros_msgs::SetMode offb_set_mode;
@@ -170,6 +176,16 @@ int main(int argc, char **argv)
 
     mavros_msgs::SetMode mission_set_mode;
     mission_set_mode.request.custom_mode = "AUTO.MISSION";
+
+    mavros_msgs::SetMode pos_set_mode;
+    pos_set_mode.request.custom_mode = "POSCTL";
+
+
+
+    sampler_land_cmd.request.command = 187;
+    sampler_land_cmd.request.param1 = 1.0;
+
+
 
     ros::Time last_request = ros::Time::now();
 
@@ -194,6 +210,25 @@ int main(int argc, char **argv)
                   std::cout << "Vehicle not armed" << std::endl; 
                   last_request = ros::Time::now();
               }
+             
+              if (current_state.armed && time_set && mission_cmd_match){
+
+                    //if(set_mode_client.call(pos_set_mode) && pos_set_mode.response.mode_sent){
+                    //  ROS_INFO("POSCTL enabled");
+                    //}
+
+
+                    if(mav_cmd_client.call(sampler_land_cmd)){
+
+                        std::cout << "Release cmd sent" << std::endl;
+                    }
+
+                    else
+                    {
+                        std::cout<<"Failed to release the sampler"<<std::endl;
+                    }
+
+              }
           }
 
       }
@@ -205,21 +240,29 @@ int main(int argc, char **argv)
             goal=false;
             goal_set=false;
             time_set = false;
+            sampler_land_cmd.request.param1 = -1.0;
+            mav_cmd_client.call(sampler_land_cmd);
+            std::cout << "Reclose cmd sent" << std::endl;
+            
 
             if( set_mode_client.call(mission_set_mode) && mission_set_mode.response.mode_sent){
                   ROS_INFO("Mission mode enabled");
 
             }
          
-      }
+        }
 
       if(mission_cmd_match){
 
           local_pos_pub.publish(goal_pose);
 
       }
+    
+
+
         ros::spinOnce();
         rate.sleep();
+    
     }
 
     return 0;

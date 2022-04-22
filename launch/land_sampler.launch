@@ -1,0 +1,14 @@
+<launch>
+
+    <arg name="Sampler_Alt" default="1.0" />
+
+
+    <arg name="RangeTopic" default="/Range_filtered"/>
+    <param name="sampler_land_alt" value="$(arg Sampler_Alt)"/>
+
+  
+    <param name="FilterSize" type="double" value="20" />
+    
+    <node pkg="mavros_fly" type="mavros_fly_land_sampler" name="land_sampler" args="/mavros/distance_sensor/range:=$(arg RangeTopic)" output="screen"/>
+
+</launch>

@@ -9,7 +9,7 @@
 
     <param name="FilterSize" type="double" value="20" />
 
-    <node pkg="mavros_fly" type="mavros_fly_range_median_filter" name="median_filter"/>
+    <node pkg="mavros_fly" type="mavros_fly_range_median_filter" name="median_filter" respawn="true"/>
 
     
     <node pkg="mavros_fly" type="mavros_fly_descent_using_rangefinder" name="RangeFinder_Descent" args="/mavros/distance_sensor/range:=$(arg RangeTopic)" output="screen"/>

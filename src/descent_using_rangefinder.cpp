@@ -82,11 +82,11 @@ void mission_cb(const mavros_msgs::WaypointList::ConstPtr& WayMsg){
   mavros_msgs::Waypoint Waypoint;
   current_mission_point = WayList.current_seq;
   for (int i=0; i<WayList.waypoints.size();i++){
-	Waypoint = WayList.waypoints[i];
-	if (Waypoint.command==mav_cmd_number){
-		target_mission_point = i;
-		std::cout<<"target_mission_point "<< target_mission_point << std::endl;
-	}   	
+  	Waypoint = WayList.waypoints[i];
+  	if (Waypoint.command==mav_cmd_number){
+  		target_mission_point = i;
+  		std::cout<<"target_mission_point "<< target_mission_point << std::endl;
+  	}   	
 
   }
   if (current_mission_point >= target_mission_point && target_mission_point != -1){

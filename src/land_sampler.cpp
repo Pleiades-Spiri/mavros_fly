@@ -91,7 +91,7 @@ void mission_cb(const mavros_msgs::WaypointList::ConstPtr& WayMsg){
     }       
 
   }
-  if (current_mission_point >= target_mission_point){
+  if (current_mission_point >= target_mission_point && target_mission_point != -1){
     mission_cmd_match = true;
     std::cout<<"mission match"<<std::endl;
   }

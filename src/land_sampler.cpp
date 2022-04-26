@@ -97,7 +97,6 @@ void mission_cb(const mavros_msgs::WaypointList::ConstPtr& WayMsg){
   }
   else{
     std::cout<<"no match"<<std::endl;
-    std::cout<<WayList.waypoints[current_mission_point].command<<std::endl;
 
   }
 
